@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::mpsc::Receiver};
+use std::{collections::HashMap, path::Path, sync::mpsc::Receiver};
 
 use egui::{Color32, FontData, FontDefinitions, FontFamily, Label, Rounding, Stroke, Ui, Vec2};
 use qtile_client_lib::utils::client::InteractiveCommandClient;
@@ -28,76 +28,72 @@ pub enum MessageType {
 }
 
 impl AsyncApp {
+    pub fn add_font(
+        fonts: &mut FontDefinitions,
+        font_name: &str,
+        font_family_name: &str,
+        font_path: &str,
+    ) {
+        let font_path = Path::new(font_path);
+        if Path::exists(font_path) {
+            let bytes = std::fs::read(font_path).unwrap().clone();
+            fonts
+                .font_data
+                .insert(font_name.to_owned(), FontData::from_owned(bytes));
+            fonts
+                .families
+                .get_mut(&FontFamily::Name(font_family_name.into()))
+                .unwrap()
+                .insert(0, font_name.to_owned());
+        } else {
+            log::warn!(
+                "Font {:?} was not loaded since path {:?} does not exist",
+                font_name,
+                font_path,
+            )
+        }
+    }
+    pub fn add_font_family(fonts: &mut FontDefinitions, font_family_name: String) {
+        fonts.families.extend([(
+            FontFamily::Name(font_family_name.clone().into()),
+            Vec::new(),
+        )]);
+    }
     pub fn new(cc: &eframe::CreationContext<'_>, rx: Option<Receiver<Response>>) -> Self {
-        // /usr/share/fonts/TTF/fa-brands-400.ttf
-        // /usr/share/fonts/TTF/fa-regular-400.ttf
-        // /usr/share/fonts/TTF/fa-solid-900.ttf
-        // /usr/share/fonts/TTF/fa-v4compatibility.ttf
-
-        let mut fonts = FontDefinitions::default();
-
-        fonts.font_data.insert(
-            "fa-brands".to_owned(),
-            FontData::from_static(include_bytes!("/usr/share/fonts/TTF/fa-brands-400.ttf")),
+        let fonts = &mut FontDefinitions::default();
+        Self::add_font_family(fonts, "Caskaydia Cove".to_owned());
+        Self::add_font_family(fonts, "Font Awesome".to_owned());
+        Self::add_font(
+            fonts,
+            "caskaydia-cove-regular",
+            "Caskaydia Cove",
+            "/usr/share/fonts/OTF/Caskaydia Cove Nerd Font Complete Regular.otf",
         );
-        fonts.font_data.insert(
-            "fa-regular".to_owned(),
-            FontData::from_static(include_bytes!("/usr/share/fonts/TTF/fa-regular-400.ttf")),
+        Self::add_font(
+            fonts,
+            "fa-brands",
+            "Font Awesome",
+            "/usr/share/fonts/TTF/fa-brands-400.ttf",
         );
-        fonts.font_data.insert(
-            "fa-solid".to_owned(),
-            FontData::from_static(include_bytes!("/usr/share/fonts/TTF/fa-solid-900.ttf")),
+        Self::add_font(
+            fonts,
+            "fa-v4compatibility",
+            "Font Awesome",
+            "/usr/share/fonts/TTF/fa-v4compatibility.ttf",
         );
-        fonts.font_data.insert(
-            "fa-v4compatibility".to_owned(),
-            FontData::from_static(include_bytes!(
-                "/usr/share/fonts/TTF/fa-v4compatibility.ttf"
-            )),
+        Self::add_font(
+            fonts,
+            "fa-regular",
+            "Font Awesome",
+            "/usr/share/fonts/TTF/fa-regular-400.ttf",
         );
-        fonts.font_data.insert(
-            "caskaydia-cove-regular".to_owned(),
-            FontData::from_static(include_bytes!(
-                "/usr/share/fonts/OTF/Caskaydia Cove Nerd Font Complete Regular.otf"
-            )),
+        Self::add_font(
+            fonts,
+            "fa-solid",
+            "Font Awesome",
+            "/usr/share/fonts/TTF/fa-solid-900.ttf",
         );
-
-        log::debug!("{:?}", fonts.families);
-        fonts
-            .families
-            .extend([(FontFamily::Name("Caskaydia Cove".into()), Vec::new())]);
-        log::debug!("{:?}", fonts.families);
-        fonts
-            .families
-            .extend([(FontFamily::Name("Font Awesome".into()), Vec::new())]);
-        log::debug!("{:?}", fonts.families);
-
-        fonts
-            .families
-            .get_mut(&FontFamily::Name("Caskaydia Cove".into()))
-            .unwrap()
-            .insert(0, "caskaydia-cove-regular".to_owned());
-        fonts
-            .families
-            .get_mut(&FontFamily::Name("Font Awesome".into()))
-            .unwrap()
-            .insert(0, "fa-v4compatibility".to_owned());
-        fonts
-            .families
-            .get_mut(&FontFamily::Name("Font Awesome".into()))
-            .unwrap()
-            .insert(0, "fa-brands".to_owned());
-        fonts
-            .families
-            .get_mut(&FontFamily::Name("Font Awesome".into()))
-            .unwrap()
-            .insert(0, "fa-solid".to_owned());
-        fonts
-            .families
-            .get_mut(&FontFamily::Name("Font Awesome".into()))
-            .unwrap()
-            .insert(0, "fa-regular".to_owned());
-
-        cc.egui_ctx.set_fonts(fonts);
+        cc.egui_ctx.set_fonts(fonts.clone());
         Self {
             is_first_run: true,
             rx,
@@ -130,61 +126,58 @@ impl AsyncApp {
             }
             ui.vertical(|ui| {
                 for (index, win) in windows.iter().enumerate() {
-                    ui.scope(|ui| {
-                        ui.style_mut().visuals.widgets.noninteractive.bg_stroke = Stroke {
-                            width: 0.0,
-                            color: Color32::from_hex("#6c7086").expect("color from hex"),
-                        };
-                        ui.style_mut().visuals.widgets.noninteractive.fg_stroke = Stroke {
-                            width: 0.0,
-                            color: Color32::from_hex("#6c7086").expect("color from hex"),
-                        };
-                        let group = ui
-                            .group(|ui| {
-                                ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                                    let label_response = Self::new_label(
-                                        ui,
-                                        win.get("class").expect("qtile sends correct format"),
-                                        &caskaydia_font_id,
-                                    );
-                                    sum_of_heights += label_response.rect.height();
+                    ui.style_mut().visuals.widgets.noninteractive.bg_stroke = Stroke {
+                        width: 0.0,
+                        color: Color32::from_hex("#6c7086").expect("color from hex"),
+                    };
+                    ui.style_mut().visuals.widgets.noninteractive.fg_stroke = Stroke {
+                        width: 0.0,
+                        color: Color32::from_hex("#6c7086").expect("color from hex"),
+                    };
+                    let group = ui
+                        .group(|ui| {
+                            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                                let label_response = Self::new_label(
+                                    ui,
+                                    win.get("class").expect("qtile sends correct format"),
+                                    &caskaydia_font_id,
+                                );
+                                sum_of_heights += label_response.rect.height();
 
-                                    let mut name = win
-                                        .get("name")
-                                        .expect("qtile sends correct format")
-                                        .clone();
-                                    if name.len() > 31 {
-                                        let upto = name
-                                            .char_indices()
-                                            .map(|(i, _)| i)
-                                            .nth(30)
-                                            .unwrap_or(name.len());
-                                        name.truncate(upto);
-                                    }
-                                    let label_response =
-                                        Self::new_label(ui, &name, &caskaydia_font_id);
-                                    sum_of_heights += label_response.rect.height();
+                                let mut name =
+                                    win.get("name").expect("qtile sends correct format").clone();
+                                if name.len() > 31 {
+                                    let upto = name
+                                        .char_indices()
+                                        .map(|(i, _)| i)
+                                        .nth(30)
+                                        .unwrap_or(name.len());
+                                    name.truncate(upto);
+                                }
+                                let label_response = Self::new_label(ui, &name, &caskaydia_font_id);
+                                sum_of_heights += label_response.rect.height();
 
-                                    let label_response = Self::new_label(
-                                        ui,
-                                        win.get("group_name").expect("qtile sends correct format"),
-                                        &caskaydia_font_id,
-                                    );
-                                    sum_of_heights += label_response.rect.height();
+                                let label_response = Self::new_label(
+                                    ui,
+                                    win.get("group_name").expect("qtile sends correct format"),
+                                    &caskaydia_font_id,
+                                );
+                                sum_of_heights += label_response.rect.height();
 
-                                    let label_response = Self::new_label(
-                                        ui,
-                                        win.get("group_label").expect("qtile sends correct format"),
-                                        &fa_font_id,
-                                    );
-                                    sum_of_heights += label_response.rect.height();
-                                });
-                            })
-                            .response
-                            .interact(egui::Sense::click())
-                            .on_hover_cursor(egui::CursorIcon::Crosshair);
+                                let label_response = Self::new_label(
+                                    ui,
+                                    win.get("group_label").expect("qtile sends correct format"),
+                                    &fa_font_id,
+                                );
+                                sum_of_heights += label_response.rect.height();
+                            });
+                        })
+                        .response
+                        .interact(egui::Sense::click())
+                        .on_hover_cursor(egui::CursorIcon::Crosshair);
 
-                        if index != 0 {
+                    if index != 0 {
+                        if !group.hovered() {
                             ui.painter().rect_stroke(
                                 group.rect,
                                 Rounding::same(10.0),
@@ -199,27 +192,33 @@ impl AsyncApp {
                                 Rounding::same(10.0),
                                 Stroke {
                                     width: 3.0,
-                                    color: Color32::from_hex(/*"#6c7086"*/ "#b4befe")
-                                        .expect("color from hex"),
+                                    color: Color32::from_hex("#b4befe").expect("color from hex"),
                                 },
                             );
                         }
-                        if group.hovered() {
-                            ui.painter().rect_stroke(
-                                group.rect,
-                                Rounding::same(10.0),
-                                Stroke {
-                                    width: 3.0,
-                                    color: Color32::from_hex(/*"#6c7086"*/ "#b4befe")
-                                        .expect("color from hex"),
-                                },
-                            );
-                        }
-                        if group.clicked() {
-                            self.focus_window(win);
-                            self.hide_our_window();
-                        };
-                    });
+                    } else if !group.hovered() {
+                        ui.painter().rect_stroke(
+                            group.rect,
+                            Rounding::same(10.0),
+                            Stroke {
+                                width: 3.0,
+                                color: Color32::from_hex("#b4befe").expect("color from hex"),
+                            },
+                        );
+                    } else {
+                        ui.painter().rect_stroke(
+                            group.rect,
+                            Rounding::same(10.0),
+                            Stroke {
+                                width: 3.0,
+                                color: Color32::from_hex("#313244").expect("color from hex"),
+                            },
+                        );
+                    }
+                    if group.clicked() {
+                        self.focus_window(win);
+                        self.hide_our_window();
+                    };
                     if index < windows.len() - 1 {
                         ui.add_space(spacing);
                         sum_of_heights += spacing;
@@ -357,8 +356,8 @@ impl eframe::App for AsyncApp {
                 }
                 MessageType::ClientFocus => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
-                    self.previous_focus_history = Some(current_focus_history.clone());
                     self.render_ui(ctx, &current_focus_history.windows);
+                    self.previous_focus_history = Some(current_focus_history.clone());
                 }
                 MessageType::None => todo!(),
             }
