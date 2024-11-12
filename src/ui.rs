@@ -1,6 +1,8 @@
 use std::{collections::HashMap, path::Path, sync::mpsc::Receiver};
 
-use egui::{Color32, FontData, FontDefinitions, FontFamily, Label, Rounding, Stroke, Ui, Vec2};
+use egui::{
+    Color32, FontData, FontDefinitions, FontFamily, Label, Rounding, Sense, Stroke, Ui, Vec2,
+};
 use qtile_client_lib::utils::client::InteractiveCommandClient;
 use serde_json::Value;
 
@@ -134,6 +136,7 @@ impl AsyncApp {
                         width: 0.0,
                         color: Color32::from_hex("#6c7086").expect("color from hex"),
                     };
+                    ui.style_mut().interaction.selectable_labels = false;
                     let group = ui
                         .group(|ui| {
                             ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
@@ -141,7 +144,8 @@ impl AsyncApp {
                                     ui,
                                     win.get("class").expect("qtile sends correct format"),
                                     &caskaydia_font_id,
-                                );
+                                )
+                                .interact(Sense::hover());
                                 sum_of_heights += label_response.rect.height();
 
                                 let mut name =
@@ -154,21 +158,24 @@ impl AsyncApp {
                                         .unwrap_or(name.len());
                                     name.truncate(upto);
                                 }
-                                let label_response = Self::new_label(ui, &name, &caskaydia_font_id);
+                                let label_response = Self::new_label(ui, &name, &caskaydia_font_id)
+                                    .interact(Sense::hover());
                                 sum_of_heights += label_response.rect.height();
 
                                 let label_response = Self::new_label(
                                     ui,
                                     win.get("group_name").expect("qtile sends correct format"),
                                     &caskaydia_font_id,
-                                );
+                                )
+                                .interact(Sense::hover());
                                 sum_of_heights += label_response.rect.height();
 
                                 let label_response = Self::new_label(
                                     ui,
                                     win.get("group_label").expect("qtile sends correct format"),
                                     &fa_font_id,
-                                );
+                                )
+                                .interact(Sense::hover());
                                 sum_of_heights += label_response.rect.height();
                             });
                         })
@@ -215,6 +222,9 @@ impl AsyncApp {
                             },
                         );
                     }
+                    if group.middle_clicked() {
+                        self.close_window(win);
+                    }
                     if group.clicked() {
                         self.focus_window(win);
                         self.hide_our_window();
@@ -225,14 +235,12 @@ impl AsyncApp {
                     }
                 }
             });
-            // available_height = ui.available_height();
-            // sum_of_heights = MAX_HEIGHT - ui.available_height();
         });
         let width = (200.0 as i32).to_string();
-        let height = sum_of_heights.min(MAX_HEIGHT) - 5.0;
+        let height = sum_of_heights.min(MAX_HEIGHT) + spacing;
         let height = (height as i32).to_string();
         self.place_our_window(width, height);
-        // ctx.request_repaint();
+        ctx.request_repaint();
     }
 
     pub fn focus_window(&self, win: &HashMap<String, String>) {
@@ -327,6 +335,16 @@ impl AsyncApp {
         let _response = InteractiveCommandClient::call(
             Some(vec!["window".to_owned(), wid.to_owned()]),
             Some("center".into()),
+            Some(vec![]),
+            false,
+        );
+    }
+
+    fn close_window(&self, win: &HashMap<String, String>) {
+        let wid = win.get("id").expect("qtile sends correct format");
+        let _response = InteractiveCommandClient::call(
+            Some(vec!["window".to_owned(), wid.to_owned()]),
+            Some("kill".into()),
             Some(vec![]),
             false,
         );
