@@ -18,6 +18,7 @@ fn main() -> anyhow::Result<()> {
 
     simple_logger::SimpleLogger::new()
         .with_level(log::LevelFilter::Info)
+        .with_colors(true)
         .env()
         .init()
         .unwrap();

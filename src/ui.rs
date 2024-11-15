@@ -1,19 +1,30 @@
-use std::{collections::HashMap, path::Path, sync::mpsc::Receiver};
-
-use egui::{
-    Color32, FontData, FontDefinitions, FontFamily, Label, Rounding, Sense, Stroke, Ui, Vec2,
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::mpsc::Receiver,
 };
+
+use crate::config::{Config, Font};
+use egui::{
+    Color32, FontData, FontDefinitions, FontFamily, Image, ImageSource, Label, Rounding, Sense,
+    Stroke, Ui, Vec2,
+};
+use freedesktop_icons::lookup;
 use qtile_client_lib::utils::client::InteractiveCommandClient;
 use serde_json::Value;
 
 const MAX_HEIGHT: f32 = 1000.0;
-const FONT_SIZE: f32 = 20.0;
+const FONT_SIZE: f32 = 24.0;
+const LOOKUP_ICON_SIZE: f32 = 72.0;
+const ICON_SIZE: f32 = 72.0;
+const DEFAULT_ICON: &str = "assets/default.svg";
 
 pub struct AsyncApp {
     is_first_run: bool,
     rx: Option<Receiver<Response>>,
     current_focus_history: Option<Response>,
     previous_focus_history: Option<Response>,
+    config: Config,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -30,27 +41,22 @@ pub enum MessageType {
 }
 
 impl AsyncApp {
-    pub fn add_font(
-        fonts: &mut FontDefinitions,
-        font_name: &str,
-        font_family_name: &str,
-        font_path: &str,
-    ) {
-        let font_path = Path::new(font_path);
+    pub fn add_font(fonts: &mut FontDefinitions, font: &Font) {
+        let font_path = Path::new(&font.path);
         if Path::exists(font_path) {
             let bytes = std::fs::read(font_path).unwrap().clone();
             fonts
                 .font_data
-                .insert(font_name.to_owned(), FontData::from_owned(bytes));
+                .insert(font.name.to_owned(), FontData::from_owned(bytes));
             fonts
                 .families
-                .get_mut(&FontFamily::Name(font_family_name.into()))
+                .get_mut(&FontFamily::Name(font.family.clone().into()))
                 .unwrap()
-                .insert(0, font_name.to_owned());
+                .insert(0, font.name.to_owned());
         } else {
             log::warn!(
                 "Font {:?} was not loaded since path {:?} does not exist",
-                font_name,
+                font.name,
                 font_path,
             )
         }
@@ -62,63 +68,68 @@ impl AsyncApp {
         )]);
     }
     pub fn new(cc: &eframe::CreationContext<'_>, rx: Option<Receiver<Response>>) -> Self {
+        let cfg: Result<Config, confy::ConfyError> = confy::load("qalttab", Some("config"));
         let fonts = &mut FontDefinitions::default();
-        Self::add_font_family(fonts, "Caskaydia Cove".to_owned());
-        Self::add_font_family(fonts, "Font Awesome".to_owned());
-        Self::add_font(
-            fonts,
-            "caskaydia-cove-regular",
-            "Caskaydia Cove",
-            "/usr/share/fonts/OTF/Caskaydia Cove Nerd Font Complete Regular.otf",
-        );
-        Self::add_font(
-            fonts,
-            "fa-brands",
-            "Font Awesome",
-            "/usr/share/fonts/TTF/fa-brands-400.ttf",
-        );
-        Self::add_font(
-            fonts,
-            "fa-v4compatibility",
-            "Font Awesome",
-            "/usr/share/fonts/TTF/fa-v4compatibility.ttf",
-        );
-        Self::add_font(
-            fonts,
-            "fa-regular",
-            "Font Awesome",
-            "/usr/share/fonts/TTF/fa-regular-400.ttf",
-        );
-        Self::add_font(
-            fonts,
-            "fa-solid",
-            "Font Awesome",
-            "/usr/share/fonts/TTF/fa-solid-900.ttf",
-        );
+        let config = match cfg {
+            Ok(c) => {
+                log::debug!("{:#?}", c);
+                for font in &c.fonts {
+                    Self::add_font_family(fonts, font.family.clone());
+                    Self::add_font(fonts, font);
+                }
+                log::debug!("{:#?}", fonts.families);
+                log::debug!("{:#?}", fonts.font_data.keys());
+                c
+            }
+            Err(e) => {
+                log::debug!("Failed to load config: {e}");
+                let def_cfg = Config::default();
+                for font in &def_cfg.fonts {
+                    Self::add_font_family(fonts, font.family.clone());
+                    Self::add_font(fonts, font);
+                }
+                def_cfg
+            }
+        };
         cc.egui_ctx.set_fonts(fonts.clone());
+        egui_extras::install_image_loaders(&cc.egui_ctx);
         Self {
             is_first_run: true,
             rx,
             current_focus_history: None,
             previous_focus_history: None,
+            config,
         }
     }
+
     pub fn new_label(ui: &mut Ui, text: &String, font: &egui::FontId) -> egui::Response {
         ui.add(Label::new(egui::RichText::new(text).font(font.clone())).wrap())
     }
+
+    pub fn find_icon(&self, wm_class: &str) -> Option<PathBuf> {
+        let mut icon_lookup_builder = lookup(wm_class)
+            .with_size(LOOKUP_ICON_SIZE as u16)
+            .with_cache();
+        let themes = self.config.icon_themes.clone();
+        for theme in themes.iter() {
+            icon_lookup_builder = icon_lookup_builder.with_theme(theme);
+        }
+
+        icon_lookup_builder.find()
+    }
+
     pub fn render_ui(&self, ctx: &eframe::egui::Context, windows: &[HashMap<String, String>]) {
         ctx.all_styles_mut(|style| {
             style.visuals.panel_fill = Color32::from_hex("#1E1E2E").expect("color from hex");
-            style.spacing.default_area_size = Vec2::new(200.0, 1000.0);
             // style.debug.debug_on_hover = true;
         });
         let spacing = 8.0;
         let mut sum_of_heights = 0.0;
-        let caskaydia_font_id = egui::FontId {
+        let text_font_id = egui::FontId {
             size: FONT_SIZE,
             family: FontFamily::Name("Caskaydia Cove".into()),
         };
-        let fa_font_id = egui::FontId {
+        let icon_font_id = egui::FontId {
             size: FONT_SIZE,
             family: FontFamily::Name("Font Awesome".into()),
         };
@@ -140,13 +151,78 @@ impl AsyncApp {
                     let group = ui
                         .group(|ui| {
                             ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                                let label_response = Self::new_label(
-                                    ui,
-                                    win.get("class").expect("qtile sends correct format"),
-                                    &caskaydia_font_id,
-                                )
-                                .interact(Sense::hover());
-                                sum_of_heights += label_response.rect.height();
+                                let win = win.clone();
+                                let wm_class =
+                                    win.get("class").expect("qtile sends correct format");
+                                let lowercase_wm_class = wm_class.clone().to_lowercase();
+                                let lowercase_wm_class = lowercase_wm_class.as_str();
+
+                                let path = self.find_icon(lowercase_wm_class);
+
+                                let image_response = match path {
+                                    Some(p) => match p.to_str() {
+                                        Some(p) => ui
+                                            .add(
+                                                Image::new(ImageSource::Uri(
+                                                    format!("file://{}", p).into(),
+                                                ))
+                                                .max_size(Vec2 {
+                                                    x: ICON_SIZE,
+                                                    y: ICON_SIZE,
+                                                }),
+                                            )
+                                            .interact(Sense::hover()),
+                                        None => ui
+                                            .add(
+                                                Image::new(ImageSource::Uri(
+                                                    format!("file://{}", DEFAULT_ICON).into(),
+                                                ))
+                                                .max_size(Vec2 {
+                                                    x: ICON_SIZE,
+                                                    y: ICON_SIZE,
+                                                }),
+                                            )
+                                            .interact(Sense::hover()),
+                                    },
+                                    None => match self.find_icon(wm_class) {
+                                        Some(p) => match p.to_str() {
+                                            Some(p) => ui
+                                                .add(
+                                                    Image::new(ImageSource::Uri(
+                                                        format!("file://{}", p).into(),
+                                                    ))
+                                                    .max_size(Vec2 {
+                                                        x: ICON_SIZE,
+                                                        y: ICON_SIZE,
+                                                    }),
+                                                )
+                                                .interact(Sense::hover()),
+                                            None => ui
+                                                .add(
+                                                    Image::new(ImageSource::Uri(
+                                                        format!("file://{}", DEFAULT_ICON).into(),
+                                                    ))
+                                                    .max_size(Vec2 {
+                                                        x: ICON_SIZE,
+                                                        y: ICON_SIZE,
+                                                    }),
+                                                )
+                                                .interact(Sense::hover()),
+                                        },
+                                        None => ui
+                                            .add(
+                                                Image::new(ImageSource::Uri(
+                                                    format!("file://{}", DEFAULT_ICON).into(),
+                                                ))
+                                                .max_size(Vec2 {
+                                                    x: ICON_SIZE,
+                                                    y: ICON_SIZE,
+                                                }),
+                                            )
+                                            .interact(Sense::hover()),
+                                    },
+                                };
+                                sum_of_heights += image_response.rect.height();
 
                                 let mut name =
                                     win.get("name").expect("qtile sends correct format").clone();
@@ -158,22 +234,22 @@ impl AsyncApp {
                                         .unwrap_or(name.len());
                                     name.truncate(upto);
                                 }
-                                let label_response = Self::new_label(ui, &name, &caskaydia_font_id)
+                                let label_response = Self::new_label(ui, &name, &text_font_id)
                                     .interact(Sense::hover());
                                 sum_of_heights += label_response.rect.height();
 
-                                let label_response = Self::new_label(
-                                    ui,
-                                    win.get("group_name").expect("qtile sends correct format"),
-                                    &caskaydia_font_id,
-                                )
-                                .interact(Sense::hover());
-                                sum_of_heights += label_response.rect.height();
+                                // let label_response = Self::new_label(
+                                //     ui,
+                                //     win.get("group_name").expect("qtile sends correct format"),
+                                //     &caskaydia_font_id,
+                                // )
+                                // .interact(Sense::hover());
+                                // sum_of_heights += label_response.rect.height();
 
                                 let label_response = Self::new_label(
                                     ui,
                                     win.get("group_label").expect("qtile sends correct format"),
-                                    &fa_font_id,
+                                    &icon_font_id,
                                 )
                                 .interact(Sense::hover());
                                 sum_of_heights += label_response.rect.height();
@@ -231,16 +307,18 @@ impl AsyncApp {
                     };
                     if index < windows.len() - 1 {
                         ui.add_space(spacing);
-                        sum_of_heights += spacing;
                     }
                 }
             });
         });
         let width = (200.0 as i32).to_string();
-        let height = sum_of_heights.min(MAX_HEIGHT) + spacing;
+        let height = sum_of_heights.min(MAX_HEIGHT);
+        ctx.all_styles_mut(|style| {
+            style.spacing.default_area_size = Vec2::new(200.0, height);
+        });
         let height = (height as i32).to_string();
-        self.place_our_window(width, height);
         ctx.request_repaint();
+        self.place_our_window(width, height);
     }
 
     pub fn focus_window(&self, win: &HashMap<String, String>) {
@@ -274,7 +352,7 @@ impl AsyncApp {
         );
     }
 
-    pub fn get_our_window_id(&self) -> String {
+    pub fn get_our_window_id(&self) -> Option<String> {
         let response = InteractiveCommandClient::call(
             Some(vec![]),
             Some("eval".into()),
@@ -303,41 +381,57 @@ impl AsyncApp {
         let response = serde_json::from_str::<Vec<HashMap<String, String>>>(&response)
             .expect("windows is a dict(str,str)");
 
-        let wid = response
+        let win = response
             .iter()
             .filter(|map| map.get("name") == Some(&"qalttab".to_string()))
             .cloned()
             .collect::<Vec<HashMap<String, String>>>();
-        let wid = wid.first().unwrap().get("wid").unwrap();
-        wid.clone()
+        let win = win.first();
+        match win {
+            Some(win) => win.get("wid").cloned(),
+            None => {
+                log::debug!("Window is not yet ready");
+                None
+            }
+        }
     }
 
     pub fn hide_our_window(&self) {
         let wid = self.get_our_window_id();
-        let _response = InteractiveCommandClient::call(
-            Some(vec!["window".to_owned(), wid.to_owned()]),
-            Some("hide".into()),
-            Some(vec![]),
-            false,
-        );
+        match wid {
+            Some(wid) => {
+                let _response = InteractiveCommandClient::call(
+                    Some(vec!["window".to_owned(), wid.to_owned()]),
+                    Some("hide".into()),
+                    Some(vec![]),
+                    false,
+                );
+            }
+            None => log::debug!("Could not hide window"),
+        }
     }
 
     pub fn place_our_window(&self, width: String, height: String) {
         let wid = self.get_our_window_id();
 
-        let _response = InteractiveCommandClient::call(
-            Some(vec!["window".to_owned(), wid.to_owned()]),
-            Some("set_size_floating".into()),
-            Some(vec![width, height]),
-            false,
-        );
+        match wid {
+            Some(wid) => {
+                let _response = InteractiveCommandClient::call(
+                    Some(vec!["window".to_owned(), wid.to_owned()]),
+                    Some("set_size_floating".into()),
+                    Some(vec![width, height]),
+                    false,
+                );
 
-        let _response = InteractiveCommandClient::call(
-            Some(vec!["window".to_owned(), wid.to_owned()]),
-            Some("center".into()),
-            Some(vec![]),
-            false,
-        );
+                let _response = InteractiveCommandClient::call(
+                    Some(vec!["window".to_owned(), wid.to_owned()]),
+                    Some("center".into()),
+                    Some(vec![]),
+                    false,
+                );
+            }
+            None => log::debug!("Could not place our window"),
+        }
     }
 
     fn close_window(&self, win: &HashMap<String, String>) {
