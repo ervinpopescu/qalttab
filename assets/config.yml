@@ -1,0 +1,17 @@
+fonts:
+  text_font:
+    Caskaydia Cove:
+    - name: Caskaydia Cove Regular
+      path: /usr/share/fonts/OTF/Caskaydia Cove Nerd Font Complete Regular.otf
+  icon_font:
+    Font Awesome:
+    - name: fa-brands
+      path: /usr/share/fonts/TTF/fa-brands-400.ttf
+    - name: fa-regular
+      path: /usr/share/fonts/TTF/fa-regular-400.ttf
+    - name: Font Awesome Solid
+      path: /usr/share/fonts/TTF/fa-solid-900.ttf
+window_icon_themes:
+- Papirus
+- Papirus-Dark
+- Papirus-Light

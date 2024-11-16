@@ -10,14 +10,31 @@ use egui::{
     Stroke, Ui, Vec2,
 };
 use freedesktop_icons::lookup;
+use log::log_enabled;
 use qtile_client_lib::utils::client::InteractiveCommandClient;
 use serde_json::Value;
 
+// TODO: configurable
+const MAX_WIDTH: f32 = 400.0;
 const MAX_HEIGHT: f32 = 1000.0;
+
+// TODO: configurable
 const FONT_SIZE: f32 = 20.0;
 const LOOKUP_ICON_SIZE: f32 = 48.0;
 const ICON_SIZE: f32 = LOOKUP_ICON_SIZE;
+
+// TODO: configurable?
 const DEFAULT_ICON: &str = "assets/default.svg";
+
+// TODO: configurable
+const STROKE_WIDTH: f32 = 3.0;
+const SPACING: f32 = 8.0;
+
+// TODO: configurable
+const BG_COLOR: &str = "#1E1E2E";
+const GROUP_HOVER_COLOR: &str = "#B4BEFE";
+const NORMAL_GROUP_COLOR: &str = "#313244";
+const TEXT_COLOR: &str = "#6c7086";
 
 pub struct AsyncApp {
     is_first_run: bool,
@@ -41,7 +58,7 @@ pub enum MessageType {
 }
 
 impl AsyncApp {
-    pub fn add_font(fonts: &mut FontDefinitions, font: &Font) {
+    pub fn add_font(fonts: &mut FontDefinitions, family: String, font: &Font) {
         let font_path = Path::new(&font.path);
         if Path::exists(font_path) {
             let bytes = std::fs::read(font_path).unwrap().clone();
@@ -50,7 +67,7 @@ impl AsyncApp {
                 .insert(font.name.to_owned(), FontData::from_owned(bytes));
             fonts
                 .families
-                .get_mut(&FontFamily::Name(font.family.clone().into()))
+                .get_mut(&FontFamily::Name(family.clone().into()))
                 .unwrap()
                 .insert(0, font.name.to_owned());
         } else {
@@ -71,22 +88,38 @@ impl AsyncApp {
         let cfg: Result<Config, confy::ConfyError> = confy::load("qalttab", Some("config"));
         let fonts = &mut FontDefinitions::default();
         let config = match cfg {
-            Ok(c) => {
-                log::debug!("{:#?}", c);
-                for font in &c.fonts {
-                    Self::add_font_family(fonts, font.family.clone());
-                    Self::add_font(fonts, font);
+            Ok(cfg) => {
+                log::debug!("{:#?}", cfg);
+                for (cfg_family, cfg_text_fonts) in &cfg.fonts.text_font {
+                    Self::add_font_family(fonts, cfg_family.clone());
+                    for font in cfg_text_fonts.iter() {
+                        Self::add_font(fonts, cfg_family.clone(), font);
+                    }
+                }
+                for (cfg_family, cfg_icon_fonts) in &cfg.fonts.icon_font {
+                    Self::add_font_family(fonts, cfg_family.clone());
+                    for font in cfg_icon_fonts.iter() {
+                        Self::add_font(fonts, cfg_family.clone(), font);
+                    }
                 }
                 log::debug!("{:#?}", fonts.families);
                 log::debug!("{:#?}", fonts.font_data.keys());
-                c
+                cfg
             }
             Err(e) => {
                 log::debug!("Failed to load config: {e}");
                 let def_cfg = Config::default();
-                for font in &def_cfg.fonts {
-                    Self::add_font_family(fonts, font.family.clone());
-                    Self::add_font(fonts, font);
+                for (def_cfg_family, def_cfg_text_fonts) in &def_cfg.fonts.text_font {
+                    Self::add_font_family(fonts, def_cfg_family.clone());
+                    for font in def_cfg_text_fonts.iter() {
+                        Self::add_font(fonts, def_cfg_family.clone(), font);
+                    }
+                }
+                for (def_cfg_family, def_cfg_icon_fonts) in &def_cfg.fonts.icon_font {
+                    Self::add_font_family(fonts, def_cfg_family.clone());
+                    for font in def_cfg_icon_fonts.iter() {
+                        Self::add_font(fonts, def_cfg_family.clone(), font);
+                    }
                 }
                 def_cfg
             }
@@ -110,7 +143,7 @@ impl AsyncApp {
         let mut icon_lookup_builder = lookup(wm_class)
             .with_size(LOOKUP_ICON_SIZE as u16)
             .with_cache();
-        let themes = self.config.icon_themes.clone();
+        let themes = self.config.window_icon_themes.clone();
         for theme in themes.iter() {
             icon_lookup_builder = icon_lookup_builder.with_theme(theme);
         }
@@ -120,10 +153,11 @@ impl AsyncApp {
 
     pub fn render_ui(&self, ctx: &eframe::egui::Context, windows: &[HashMap<String, String>]) {
         ctx.all_styles_mut(|style| {
-            style.visuals.panel_fill = Color32::from_hex("#1E1E2E").expect("color from hex");
-            // style.debug.debug_on_hover = true;
+            style.visuals.panel_fill = Color32::from_hex(BG_COLOR).expect("color from hex");
+            if log_enabled!(log::Level::Debug) {
+                style.debug.debug_on_hover = true;
+            }
         });
-        let spacing = 8.0;
         let mut sum_of_heights = 0.0;
         let text_font_id = egui::FontId {
             size: FONT_SIZE,
@@ -141,11 +175,11 @@ impl AsyncApp {
                 for (index, win) in windows.iter().enumerate() {
                     ui.style_mut().visuals.widgets.noninteractive.bg_stroke = Stroke {
                         width: 0.0,
-                        color: Color32::from_hex("#6c7086").expect("color from hex"),
+                        color: Color32::from_hex(TEXT_COLOR).expect("color from hex"),
                     };
                     ui.style_mut().visuals.widgets.noninteractive.fg_stroke = Stroke {
                         width: 0.0,
-                        color: Color32::from_hex("#6c7086").expect("color from hex"),
+                        color: Color32::from_hex(TEXT_COLOR).expect("color from hex"),
                     };
                     ui.style_mut().interaction.selectable_labels = false;
                     let group = ui
@@ -159,6 +193,7 @@ impl AsyncApp {
 
                                 let path = self.find_icon(lowercase_wm_class);
 
+                                // TODO: extract image creation to function
                                 let _image_response = match path {
                                     Some(p) => match p.to_str() {
                                         Some(p) => ui
@@ -263,8 +298,9 @@ impl AsyncApp {
                                 group.rect,
                                 Rounding::same(10.0),
                                 Stroke {
-                                    width: 3.0,
-                                    color: Color32::from_hex("#313244").expect("color from hex"), // Highlight color
+                                    width: STROKE_WIDTH,
+                                    color: Color32::from_hex(NORMAL_GROUP_COLOR)
+                                        .expect("color from hex"), // Highlight color
                                 },
                             );
                         } else {
@@ -272,8 +308,9 @@ impl AsyncApp {
                                 group.rect,
                                 Rounding::same(10.0),
                                 Stroke {
-                                    width: 3.0,
-                                    color: Color32::from_hex("#b4befe").expect("color from hex"),
+                                    width: STROKE_WIDTH,
+                                    color: Color32::from_hex(GROUP_HOVER_COLOR)
+                                        .expect("color from hex"),
                                 },
                             );
                         }
@@ -282,8 +319,9 @@ impl AsyncApp {
                             group.rect,
                             Rounding::same(10.0),
                             Stroke {
-                                width: 3.0,
-                                color: Color32::from_hex("#b4befe").expect("color from hex"),
+                                width: STROKE_WIDTH,
+                                color: Color32::from_hex(GROUP_HOVER_COLOR)
+                                    .expect("color from hex"),
                             },
                         );
                     } else {
@@ -291,8 +329,9 @@ impl AsyncApp {
                             group.rect,
                             Rounding::same(10.0),
                             Stroke {
-                                width: 3.0,
-                                color: Color32::from_hex("#313244").expect("color from hex"),
+                                width: STROKE_WIDTH,
+                                color: Color32::from_hex(NORMAL_GROUP_COLOR)
+                                    .expect("color from hex"),
                             },
                         );
                     }
@@ -304,15 +343,17 @@ impl AsyncApp {
                         self.hide_our_window();
                     };
                     if index < windows.len() - 1 {
-                        ui.add_space(spacing);
-                        sum_of_heights += spacing;
+                        ui.add_space(SPACING);
                     }
                 }
             });
         });
-        let width = (200.0 as i32).to_string();
-        let height = sum_of_heights.min(MAX_HEIGHT) + windows.len() as f32 * spacing;
-        log::debug!("{}", height);
+        let width = (MAX_WIDTH as i32).to_string();
+        let height = sum_of_heights.min(MAX_HEIGHT)
+            + (windows.len() - 1) as f32 * SPACING
+            + windows.len() as f32 * 2.0 * STROKE_WIDTH
+            + STROKE_WIDTH;
+        log::debug!("height: {}", height);
         let height = (height as i32).to_string();
         self.place_our_window(width, height);
         ctx.request_repaint();
