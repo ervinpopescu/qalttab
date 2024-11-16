@@ -14,9 +14,9 @@ use qtile_client_lib::utils::client::InteractiveCommandClient;
 use serde_json::Value;
 
 const MAX_HEIGHT: f32 = 1000.0;
-const FONT_SIZE: f32 = 24.0;
-const LOOKUP_ICON_SIZE: f32 = 72.0;
-const ICON_SIZE: f32 = 72.0;
+const FONT_SIZE: f32 = 20.0;
+const LOOKUP_ICON_SIZE: f32 = 48.0;
+const ICON_SIZE: f32 = LOOKUP_ICON_SIZE;
 const DEFAULT_ICON: &str = "assets/default.svg";
 
 pub struct AsyncApp {
@@ -159,7 +159,7 @@ impl AsyncApp {
 
                                 let path = self.find_icon(lowercase_wm_class);
 
-                                let image_response = match path {
+                                let _image_response = match path {
                                     Some(p) => match p.to_str() {
                                         Some(p) => ui
                                             .add(
@@ -222,7 +222,6 @@ impl AsyncApp {
                                             .interact(Sense::hover()),
                                     },
                                 };
-                                sum_of_heights += image_response.rect.height();
 
                                 let mut name =
                                     win.get("name").expect("qtile sends correct format").clone();
@@ -234,9 +233,8 @@ impl AsyncApp {
                                         .unwrap_or(name.len());
                                     name.truncate(upto);
                                 }
-                                let label_response = Self::new_label(ui, &name, &text_font_id)
+                                let _label_response = Self::new_label(ui, &name, &text_font_id)
                                     .interact(Sense::hover());
-                                sum_of_heights += label_response.rect.height();
 
                                 // let label_response = Self::new_label(
                                 //     ui,
@@ -246,18 +244,18 @@ impl AsyncApp {
                                 // .interact(Sense::hover());
                                 // sum_of_heights += label_response.rect.height();
 
-                                let label_response = Self::new_label(
+                                let _label_response = Self::new_label(
                                     ui,
                                     win.get("group_label").expect("qtile sends correct format"),
                                     &icon_font_id,
                                 )
                                 .interact(Sense::hover());
-                                sum_of_heights += label_response.rect.height();
                             });
                         })
                         .response
                         .interact(egui::Sense::click())
                         .on_hover_cursor(egui::CursorIcon::Crosshair);
+                    sum_of_heights += group.rect.height();
 
                     if index != 0 {
                         if !group.hovered() {
@@ -307,18 +305,17 @@ impl AsyncApp {
                     };
                     if index < windows.len() - 1 {
                         ui.add_space(spacing);
+                        sum_of_heights += spacing;
                     }
                 }
             });
         });
         let width = (200.0 as i32).to_string();
-        let height = sum_of_heights.min(MAX_HEIGHT);
-        ctx.all_styles_mut(|style| {
-            style.spacing.default_area_size = Vec2::new(200.0, height);
-        });
+        let height = sum_of_heights.min(MAX_HEIGHT) + windows.len() as f32 * spacing;
+        log::debug!("{}", height);
         let height = (height as i32).to_string();
-        ctx.request_repaint();
         self.place_our_window(width, height);
+        ctx.request_repaint();
     }
 
     pub fn focus_window(&self, win: &HashMap<String, String>) {
