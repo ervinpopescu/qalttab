@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::bail;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::ui::{MessageType, Response};
 
@@ -39,16 +39,15 @@ pub fn listen(tx: Sender<Response>) -> anyhow::Result<()> {
 }
 
 pub fn handle_conn(mut stream: UnixStream, tx: &Sender<Response>) -> anyhow::Result<()> {
-    let mut buffer = [0; 1024];
-    // Read data from the client
+    let mut buffer = [0; 4096];
     let bytes_read = stream.read(&mut buffer)?;
-    // Write data back to the client
     let slice = &buffer[..bytes_read];
-    stream.write_all(slice)?;
+    let success = json!({"message": "success"});
+    stream.write_fmt(format_args!("{}", success))?;
     let response: Result<HashMap<String, Value>, serde_json::Error> = serde_json::from_slice(slice);
     match response {
         Ok(response) => {
-            // log::debug!("{response:#?}");
+            log::debug!("{response:#?}");
             let message_type = match response.get("message_type").expect("correct message") {
                 Value::String(s) => match s.as_str() {
                     "client_focus" => MessageType::ClientFocus,
@@ -85,8 +84,6 @@ pub fn handle_conn(mut stream: UnixStream, tx: &Sender<Response>) -> anyhow::Res
                 Ok(r) => r,
                 Err(e) => log::error!("could not send message to GUI thread: {}", e),
             }
-            // when a message is sent create window
-            // detect when alt is released and close window
         }
         Err(e) => log::error!("{}", e),
     }
