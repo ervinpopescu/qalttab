@@ -10,7 +10,6 @@ use egui::{
     Stroke, Ui, Vec2,
 };
 use freedesktop_icons::lookup;
-use log::log_enabled;
 use qtile_client_lib::utils::client::InteractiveCommandClient;
 use serde_json::Value;
 
@@ -34,7 +33,7 @@ const SPACING: f32 = 8.0;
 const BG_COLOR: &str = "#1E1E2E";
 const GROUP_HOVER_COLOR: &str = "#B4BEFE";
 const NORMAL_GROUP_COLOR: &str = "#313244";
-const TEXT_COLOR: &str = "#6c7086";
+const TEXT_COLOR: &str = "#6C7086";
 
 pub struct AsyncApp {
     is_first_run: bool,
@@ -154,9 +153,6 @@ impl AsyncApp {
     pub fn render_ui(&self, ctx: &eframe::egui::Context, windows: &[HashMap<String, String>]) {
         ctx.all_styles_mut(|style| {
             style.visuals.panel_fill = Color32::from_hex(BG_COLOR).expect("color from hex");
-            if log_enabled!(log::Level::Debug) {
-                style.debug.debug_on_hover = true;
-            }
         });
         let mut sum_of_heights = 0.0;
         let text_font_id = egui::FontId {
