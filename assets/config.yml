@@ -1,17 +1,36 @@
 fonts:
   text_font:
-    Caskaydia Cove:
+    family_name: Caskaydia Cove
+    fonts:
     - name: Caskaydia Cove Regular
       path: /usr/share/fonts/OTF/Caskaydia Cove Nerd Font Complete Regular.otf
+    size: 20.0
   icon_font:
-    Font Awesome:
+    family_name: Font Awesome
+    fonts:
     - name: fa-brands
       path: /usr/share/fonts/TTF/fa-brands-400.ttf
     - name: fa-regular
       path: /usr/share/fonts/TTF/fa-regular-400.ttf
     - name: Font Awesome Solid
       path: /usr/share/fonts/TTF/fa-solid-900.ttf
-window_icon_themes:
-- Papirus
-- Papirus-Dark
-- Papirus-Light
+    size: 20.0
+colors:
+  bg_color: '#1E1E2E'
+  text_color: '#6C7086'
+  normal_group_color: '#313244'
+  group_hover_color: '#B4BEFE'
+icons:
+  themes:
+  - Papirus
+  - Papirus-Dark
+  - Papirus-Light
+  lookup_icon_size: 48.0
+  visible_icon_size: 48.0
+  default_icon: ./assets/default.svg
+sizes:
+  group_spacing: 8.0
+  group_rect_stroke_width: 3.0
+  window_size:
+    width: 400.0
+    height: 1000.0

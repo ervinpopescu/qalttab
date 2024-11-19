@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -17,50 +15,106 @@ impl Font {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Fonts {
-    pub text_font: HashMap<String, Vec<Font>>,
-    pub icon_font: HashMap<String, Vec<Font>>,
+pub struct FontFamily {
+    pub family_name: String,
+    pub fonts: Vec<Font>,
+    pub size: f32,
 }
 
-// TODO: Add `icon_font` and `text_font`
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Fonts {
+    pub text_font: FontFamily,
+    pub icon_font: FontFamily,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct WindowSize {
+    pub width: f32,
+    pub height: f32,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct Colors {
+    pub bg_color: String,
+    pub text_color: String,
+    pub normal_group_color: String,
+    pub group_hover_color: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct IconConfig {
+    pub themes: Vec<String>,
+    pub lookup_icon_size: f32,
+    pub visible_icon_size: f32,
+    pub default_icon: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Sizes {
+    pub group_spacing: f32,
+    pub group_rect_stroke_width: f32,
+    pub window_size: WindowSize,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     pub fonts: Fonts,
-    pub window_icon_themes: Vec<String>,
+    pub colors: Colors,
+    pub icons: IconConfig,
+    pub sizes: Sizes,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        let mut text_font = HashMap::new();
-        text_font.insert(
-            "Caskaydia Cove".into(),
-            vec![Font::new(
-                "Caskaydia Cove Regular",
-                "/usr/share/fonts/OTF/Caskaydia Cove Nerd Font Complete Regular.otf",
-            )],
-        );
-        let mut icon_font = HashMap::new();
-        icon_font.insert(
-            "Font Awesome".into(),
-            vec![
-                Font::new("fa-brands", "/usr/share/fonts/TTF/fa-brands-400.ttf"),
-                Font::new("fa-regular", "/usr/share/fonts/TTF/fa-regular-400.ttf"),
-                Font::new(
-                    "Font Awesome Solid",
-                    "/usr/share/fonts/TTF/fa-solid-900.ttf",
-                ),
-            ],
-        );
+        let font_size = 20.0;
+        let lookup_icon_size = 48.0;
         Self {
             fonts: Fonts {
-                text_font,
-                icon_font,
+                text_font: FontFamily {
+                    family_name: "Caskaydia Cove".into(),
+                    fonts: vec![Font::new(
+                        "Caskaydia Cove Regular",
+                        "/usr/share/fonts/OTF/Caskaydia Cove Nerd Font Complete Regular.otf",
+                    )],
+                    size: font_size,
+                },
+                icon_font: FontFamily {
+                    family_name: "Font Awesome".into(),
+                    fonts: vec![
+                        Font::new("fa-brands", "/usr/share/fonts/TTF/fa-brands-400.ttf"),
+                        Font::new("fa-regular", "/usr/share/fonts/TTF/fa-regular-400.ttf"),
+                        Font::new(
+                            "Font Awesome Solid",
+                            "/usr/share/fonts/TTF/fa-solid-900.ttf",
+                        ),
+                    ],
+                    size: font_size,
+                },
             },
-            window_icon_themes: vec![
-                "Papirus".into(),
-                "Papirus-Dark".into(),
-                "Papirus-Light".into(),
-            ],
+            sizes: Sizes {
+                group_spacing: 8.0,
+                group_rect_stroke_width: 3.0,
+                window_size: WindowSize {
+                    width: 400.0,
+                    height: 1000.0,
+                },
+            },
+            icons: IconConfig {
+                themes: vec![
+                    "Papirus".into(),
+                    "Papirus-Dark".into(),
+                    "Papirus-Light".into(),
+                ],
+                lookup_icon_size,
+                visible_icon_size: lookup_icon_size,
+                default_icon: "./assets/default.svg".into(),
+            },
+            colors: Colors {
+                bg_color: "#1E1E2E".into(),
+                group_hover_color: "#B4BEFE".into(),
+                normal_group_color: "#313244".into(),
+                text_color: "#6C7086".into(),
+            },
         }
     }
 }
