@@ -13,30 +13,7 @@ use freedesktop_icons::lookup;
 use qtile_client_lib::utils::client::InteractiveCommandClient;
 use serde_json::Value;
 
-// TODO: configurable
-const MAX_WIDTH: f32 = 400.0;
-const MAX_HEIGHT: f32 = 1000.0;
-
-// TODO: configurable
-const FONT_SIZE: f32 = 20.0;
-const LOOKUP_ICON_SIZE: f32 = 48.0;
-const ICON_SIZE: f32 = LOOKUP_ICON_SIZE;
-
-// TODO: configurable?
-const DEFAULT_ICON: &str = "assets/default.svg";
-
-// TODO: configurable
-const STROKE_WIDTH: f32 = 3.0;
-const SPACING: f32 = 8.0;
-
-// TODO: configurable
-const BG_COLOR: &str = "#1E1E2E";
-const GROUP_HOVER_COLOR: &str = "#B4BEFE";
-const NORMAL_GROUP_COLOR: &str = "#313244";
-const TEXT_COLOR: &str = "#6C7086";
-
 pub struct AsyncApp {
-    is_first_run: bool,
     rx: Option<Receiver<Response>>,
     current_focus_history: Option<Response>,
     previous_focus_history: Option<Response>,
@@ -89,36 +66,38 @@ impl AsyncApp {
         let config = match cfg {
             Ok(cfg) => {
                 log::debug!("{:#?}", cfg);
-                for (cfg_family, cfg_text_fonts) in &cfg.fonts.text_font {
-                    Self::add_font_family(fonts, cfg_family.clone());
-                    for font in cfg_text_fonts.iter() {
-                        Self::add_font(fonts, cfg_family.clone(), font);
-                    }
+                let (cfg_family, cfg_text_fonts) =
+                    (&cfg.fonts.text_font.family_name, &cfg.fonts.text_font.fonts);
+                Self::add_font_family(fonts, cfg_family.clone());
+                for font in cfg_text_fonts.iter() {
+                    Self::add_font(fonts, cfg_family.clone(), font);
                 }
-                for (cfg_family, cfg_icon_fonts) in &cfg.fonts.icon_font {
-                    Self::add_font_family(fonts, cfg_family.clone());
-                    for font in cfg_icon_fonts.iter() {
-                        Self::add_font(fonts, cfg_family.clone(), font);
-                    }
+                let (cfg_family, cfg_icon_fonts) =
+                    (&cfg.fonts.icon_font.family_name, &cfg.fonts.icon_font.fonts);
+                Self::add_font_family(fonts, cfg_family.clone());
+                for font in cfg_icon_fonts.iter() {
+                    Self::add_font(fonts, cfg_family.clone(), font);
                 }
-                log::debug!("{:#?}", fonts.families);
-                log::debug!("{:#?}", fonts.font_data.keys());
                 cfg
             }
             Err(e) => {
                 log::debug!("Failed to load config: {e}");
                 let def_cfg = Config::default();
-                for (def_cfg_family, def_cfg_text_fonts) in &def_cfg.fonts.text_font {
-                    Self::add_font_family(fonts, def_cfg_family.clone());
-                    for font in def_cfg_text_fonts.iter() {
-                        Self::add_font(fonts, def_cfg_family.clone(), font);
-                    }
+                let (def_cfg_family, def_cfg_text_fonts) = (
+                    &def_cfg.fonts.text_font.family_name,
+                    &def_cfg.fonts.text_font.fonts,
+                );
+                Self::add_font_family(fonts, def_cfg_family.clone());
+                for font in def_cfg_text_fonts.iter() {
+                    Self::add_font(fonts, def_cfg_family.clone(), font);
                 }
-                for (def_cfg_family, def_cfg_icon_fonts) in &def_cfg.fonts.icon_font {
-                    Self::add_font_family(fonts, def_cfg_family.clone());
-                    for font in def_cfg_icon_fonts.iter() {
-                        Self::add_font(fonts, def_cfg_family.clone(), font);
-                    }
+                let (def_cfg_icon_family, def_cfg_icon_fonts) = (
+                    &def_cfg.fonts.icon_font.family_name,
+                    &def_cfg.fonts.icon_font.fonts,
+                );
+                Self::add_font_family(fonts, def_cfg_icon_family.clone());
+                for font in def_cfg_icon_fonts.iter() {
+                    Self::add_font(fonts, def_cfg_icon_family.clone(), font);
                 }
                 def_cfg
             }
@@ -126,7 +105,6 @@ impl AsyncApp {
         cc.egui_ctx.set_fonts(fonts.clone());
         egui_extras::install_image_loaders(&cc.egui_ctx);
         Self {
-            is_first_run: true,
             rx,
             current_focus_history: None,
             previous_focus_history: None,
@@ -138,11 +116,21 @@ impl AsyncApp {
         ui.add(Label::new(egui::RichText::new(text).font(font.clone())).wrap())
     }
 
+    pub fn new_image(&self, ui: &mut Ui, path: &str) -> egui::Response {
+        ui.add(
+            Image::new(ImageSource::Uri(format!("file://{}", path).into())).max_size(Vec2 {
+                x: self.config.icons.visible_icon_size,
+                y: self.config.icons.visible_icon_size,
+            }),
+        )
+        .interact(Sense::hover())
+    }
+
     pub fn find_icon(&self, wm_class: &str) -> Option<PathBuf> {
         let mut icon_lookup_builder = lookup(wm_class)
-            .with_size(LOOKUP_ICON_SIZE as u16)
+            .with_size(self.config.icons.lookup_icon_size as u16)
             .with_cache();
-        let themes = self.config.window_icon_themes.clone();
+        let themes = self.config.icons.themes.clone();
         for theme in themes.iter() {
             icon_lookup_builder = icon_lookup_builder.with_theme(theme);
         }
@@ -152,151 +140,135 @@ impl AsyncApp {
 
     pub fn render_ui(&self, ctx: &eframe::egui::Context, windows: &[HashMap<String, String>]) {
         ctx.all_styles_mut(|style| {
-            style.visuals.panel_fill = Color32::from_hex(BG_COLOR).expect("color from hex");
+            style.visuals.panel_fill =
+                Color32::from_hex(self.config.colors.bg_color.as_str()).expect("color from hex");
         });
         let mut sum_of_heights = 0.0;
         let text_font_id = egui::FontId {
-            size: FONT_SIZE,
-            family: FontFamily::Name("Caskaydia Cove".into()),
+            family: FontFamily::Name(self.config.fonts.text_font.family_name.clone().into()),
+            size: self.config.fonts.text_font.size,
         };
         let icon_font_id = egui::FontId {
-            size: FONT_SIZE,
-            family: FontFamily::Name("Font Awesome".into()),
+            size: self.config.fonts.icon_font.size,
+            family: FontFamily::Name(self.config.fonts.icon_font.family_name.clone().into()),
         };
         egui::CentralPanel::default().show(ctx, |ui| {
-            if self.is_first_run {
-                self.hide_our_window();
-            }
-            ui.vertical(|ui| {
-                for (index, win) in windows.iter().enumerate() {
-                    ui.style_mut().visuals.widgets.noninteractive.bg_stroke = Stroke {
-                        width: 0.0,
-                        color: Color32::from_hex(TEXT_COLOR).expect("color from hex"),
-                    };
-                    ui.style_mut().visuals.widgets.noninteractive.fg_stroke = Stroke {
-                        width: 0.0,
-                        color: Color32::from_hex(TEXT_COLOR).expect("color from hex"),
-                    };
-                    ui.style_mut().interaction.selectable_labels = false;
-                    let group = ui
-                        .group(|ui| {
-                            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                                let win = win.clone();
-                                let wm_class =
-                                    win.get("class").expect("qtile sends correct format");
-                                let lowercase_wm_class = wm_class.clone().to_lowercase();
-                                let lowercase_wm_class = lowercase_wm_class.as_str();
+            let vertical = ui
+                .vertical(|ui| {
+                    for (index, win) in windows.iter().enumerate() {
+                        ui.style_mut().visuals.widgets.noninteractive.bg_stroke = Stroke {
+                            width: 0.0,
+                            color: Color32::from_hex(self.config.colors.text_color.as_str())
+                                .expect("color from hex"),
+                        };
+                        ui.style_mut().visuals.widgets.noninteractive.fg_stroke = Stroke {
+                            width: 0.0,
+                            color: Color32::from_hex(self.config.colors.text_color.as_str())
+                                .expect("color from hex"),
+                        };
+                        ui.style_mut().interaction.selectable_labels = false;
+                        let group = ui
+                            .group(|ui| {
+                                ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                                    let win = win.clone();
+                                    let wm_class =
+                                        win.get("class").expect("qtile sends correct format");
+                                    let lowercase_wm_class = wm_class.clone().to_lowercase();
+                                    let lowercase_wm_class = lowercase_wm_class.as_str();
 
-                                let path = self.find_icon(lowercase_wm_class);
+                                    let path = self.find_icon(lowercase_wm_class);
 
-                                // TODO: extract image creation to function
-                                let _image_response = match path {
-                                    Some(p) => match p.to_str() {
-                                        Some(p) => ui
-                                            .add(
-                                                Image::new(ImageSource::Uri(
-                                                    format!("file://{}", p).into(),
-                                                ))
-                                                .max_size(Vec2 {
-                                                    x: ICON_SIZE,
-                                                    y: ICON_SIZE,
-                                                }),
-                                            )
-                                            .interact(Sense::hover()),
-                                        None => ui
-                                            .add(
-                                                Image::new(ImageSource::Uri(
-                                                    format!("file://{}", DEFAULT_ICON).into(),
-                                                ))
-                                                .max_size(Vec2 {
-                                                    x: ICON_SIZE,
-                                                    y: ICON_SIZE,
-                                                }),
-                                            )
-                                            .interact(Sense::hover()),
-                                    },
-                                    None => match self.find_icon(wm_class) {
+                                    let _image_response = match path {
                                         Some(p) => match p.to_str() {
-                                            Some(p) => ui
-                                                .add(
-                                                    Image::new(ImageSource::Uri(
-                                                        format!("file://{}", p).into(),
-                                                    ))
-                                                    .max_size(Vec2 {
-                                                        x: ICON_SIZE,
-                                                        y: ICON_SIZE,
-                                                    }),
-                                                )
-                                                .interact(Sense::hover()),
-                                            None => ui
-                                                .add(
-                                                    Image::new(ImageSource::Uri(
-                                                        format!("file://{}", DEFAULT_ICON).into(),
-                                                    ))
-                                                    .max_size(Vec2 {
-                                                        x: ICON_SIZE,
-                                                        y: ICON_SIZE,
-                                                    }),
-                                                )
-                                                .interact(Sense::hover()),
+                                            Some(p) => self.new_image(ui, p),
+                                            None => {
+                                                self.new_image(ui, &self.config.icons.default_icon)
+                                            }
                                         },
-                                        None => ui
-                                            .add(
-                                                Image::new(ImageSource::Uri(
-                                                    format!("file://{}", DEFAULT_ICON).into(),
-                                                ))
-                                                .max_size(Vec2 {
-                                                    x: ICON_SIZE,
-                                                    y: ICON_SIZE,
-                                                }),
-                                            )
-                                            .interact(Sense::hover()),
-                                    },
-                                };
+                                        None => match self.find_icon(wm_class) {
+                                            Some(p) => match p.to_str() {
+                                                Some(p) => self.new_image(ui, p),
+                                                None => self
+                                                    .new_image(ui, &self.config.icons.default_icon),
+                                            },
+                                            None => {
+                                                self.new_image(ui, &self.config.icons.default_icon)
+                                            }
+                                        },
+                                    };
 
-                                let mut name =
-                                    win.get("name").expect("qtile sends correct format").clone();
-                                if name.len() > 31 {
-                                    let upto = name
-                                        .char_indices()
-                                        .map(|(i, _)| i)
-                                        .nth(30)
-                                        .unwrap_or(name.len());
-                                    name.truncate(upto);
-                                }
-                                let _label_response = Self::new_label(ui, &name, &text_font_id)
+                                    let mut name = win
+                                        .get("name")
+                                        .expect("qtile sends correct format")
+                                        .clone();
+                                    if name.len() > 31 {
+                                        let upto = name
+                                            .char_indices()
+                                            .map(|(i, _)| i)
+                                            .nth(30)
+                                            .unwrap_or(name.len());
+                                        name.truncate(upto);
+                                    }
+                                    let _label_response = Self::new_label(ui, &name, &text_font_id)
+                                        .interact(Sense::hover());
+
+                                    // let label_response = Self::new_label(
+                                    //     ui,
+                                    //     win.get("group_name").expect("qtile sends correct format"),
+                                    //     &caskaydia_font_id,
+                                    // )
+                                    // .interact(Sense::hover());
+                                    // sum_of_heights += label_response.rect.height();
+
+                                    let _label_response = Self::new_label(
+                                        ui,
+                                        win.get("group_label").expect("qtile sends correct format"),
+                                        &icon_font_id,
+                                    )
                                     .interact(Sense::hover());
+                                });
+                            })
+                            .response
+                            .interact(egui::Sense::click())
+                            .on_hover_cursor(egui::CursorIcon::Crosshair);
+                        sum_of_heights += group.rect.height();
 
-                                // let label_response = Self::new_label(
-                                //     ui,
-                                //     win.get("group_name").expect("qtile sends correct format"),
-                                //     &caskaydia_font_id,
-                                // )
-                                // .interact(Sense::hover());
-                                // sum_of_heights += label_response.rect.height();
-
-                                let _label_response = Self::new_label(
-                                    ui,
-                                    win.get("group_label").expect("qtile sends correct format"),
-                                    &icon_font_id,
-                                )
-                                .interact(Sense::hover());
-                            });
-                        })
-                        .response
-                        .interact(egui::Sense::click())
-                        .on_hover_cursor(egui::CursorIcon::Crosshair);
-                    sum_of_heights += group.rect.height();
-
-                    if index != 0 {
-                        if !group.hovered() {
+                        if index != 0 {
+                            if !group.hovered() {
+                                ui.painter().rect_stroke(
+                                    group.rect,
+                                    Rounding::same(10.0),
+                                    Stroke {
+                                        width: self.config.sizes.group_rect_stroke_width,
+                                        color: Color32::from_hex(
+                                            self.config.colors.normal_group_color.as_str(),
+                                        )
+                                        .expect("color from hex"), // Highlight color
+                                    },
+                                );
+                            } else {
+                                ui.painter().rect_stroke(
+                                    group.rect,
+                                    Rounding::same(10.0),
+                                    Stroke {
+                                        width: self.config.sizes.group_rect_stroke_width,
+                                        color: Color32::from_hex(
+                                            self.config.colors.group_hover_color.as_str(),
+                                        )
+                                        .expect("color from hex"),
+                                    },
+                                );
+                            }
+                        } else if !group.hovered() {
                             ui.painter().rect_stroke(
                                 group.rect,
                                 Rounding::same(10.0),
                                 Stroke {
-                                    width: STROKE_WIDTH,
-                                    color: Color32::from_hex(NORMAL_GROUP_COLOR)
-                                        .expect("color from hex"), // Highlight color
+                                    width: self.config.sizes.group_rect_stroke_width,
+                                    color: Color32::from_hex(
+                                        self.config.colors.group_hover_color.as_str(),
+                                    )
+                                    .expect("color from hex"),
                                 },
                             );
                         } else {
@@ -304,51 +276,42 @@ impl AsyncApp {
                                 group.rect,
                                 Rounding::same(10.0),
                                 Stroke {
-                                    width: STROKE_WIDTH,
-                                    color: Color32::from_hex(GROUP_HOVER_COLOR)
-                                        .expect("color from hex"),
+                                    width: self.config.sizes.group_rect_stroke_width,
+                                    color: Color32::from_hex(
+                                        self.config.colors.normal_group_color.as_str(),
+                                    )
+                                    .expect("color from hex"),
                                 },
                             );
                         }
-                    } else if !group.hovered() {
-                        ui.painter().rect_stroke(
-                            group.rect,
-                            Rounding::same(10.0),
-                            Stroke {
-                                width: STROKE_WIDTH,
-                                color: Color32::from_hex(GROUP_HOVER_COLOR)
-                                    .expect("color from hex"),
-                            },
-                        );
-                    } else {
-                        ui.painter().rect_stroke(
-                            group.rect,
-                            Rounding::same(10.0),
-                            Stroke {
-                                width: STROKE_WIDTH,
-                                color: Color32::from_hex(NORMAL_GROUP_COLOR)
-                                    .expect("color from hex"),
-                            },
-                        );
+                        if group.middle_clicked() {
+                            self.close_window(win);
+                        }
+                        if group.clicked() {
+                            self.focus_window(win);
+                            self.hide_our_window();
+                        };
+                        if index < windows.len() - 1 {
+                            ui.add_space(self.config.sizes.group_spacing);
+                        }
                     }
-                    if group.middle_clicked() {
-                        self.close_window(win);
-                    }
-                    if group.clicked() {
-                        self.focus_window(win);
-                        self.hide_our_window();
-                    };
-                    if index < windows.len() - 1 {
-                        ui.add_space(SPACING);
-                    }
-                }
-            });
+                })
+                .response
+                .rect
+                .height();
+            log::debug!("vertical: {}", vertical);
+            sum_of_heights = vertical;
         });
-        let width = (MAX_WIDTH as i32).to_string();
-        let height = sum_of_heights.min(MAX_HEIGHT)
-            + (windows.len() - 1) as f32 * SPACING
-            + windows.len() as f32 * 2.0 * STROKE_WIDTH
-            + STROKE_WIDTH;
+        let width = (self.config.sizes.window_size.width as i32).to_string();
+        // if self.config.sizes.group_spacing - self.config.sizes.group_rect_stroke_width
+        //     < self.config.sizes.group_rect_stroke_width
+        // {
+        //     sum_of_heights
+        // }
+        let height = sum_of_heights.min(self.config.sizes.window_size.height)
+            + ctx.style().spacing.window_margin.top
+            + ctx.style().spacing.window_margin.bottom
+            + self.config.sizes.group_rect_stroke_width;
         log::debug!("height: {}", height);
         let height = (height as i32).to_string();
         self.place_our_window(width, height);
