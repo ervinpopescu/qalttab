@@ -65,7 +65,7 @@ impl AsyncApp {
         let fonts = &mut FontDefinitions::default();
         let config = match cfg {
             Ok(cfg) => {
-                log::debug!("{:#?}", cfg);
+                log::debug!("Loaded config: {:#?}", cfg);
                 let (cfg_family, cfg_text_fonts) =
                     (&cfg.fonts.text_font.family_name, &cfg.fonts.text_font.fonts);
                 Self::add_font_family(fonts, cfg_family.clone());
@@ -112,8 +112,16 @@ impl AsyncApp {
         }
     }
 
-    pub fn new_label(ui: &mut Ui, text: &String, font: &egui::FontId) -> egui::Response {
-        ui.add(Label::new(egui::RichText::new(text).font(font.clone())).wrap())
+    pub fn find_icon(&self, wm_class: &str) -> Option<PathBuf> {
+        let mut icon_lookup_builder = lookup(wm_class)
+            .with_size(self.config.icons.lookup_icon_size as u16)
+            .with_cache();
+        let themes = self.config.icons.themes.clone();
+        for theme in themes.iter() {
+            icon_lookup_builder = icon_lookup_builder.with_theme(theme);
+        }
+
+        icon_lookup_builder.find()
     }
 
     pub fn new_image(&self, ui: &mut Ui, path: &str) -> egui::Response {
@@ -126,16 +134,47 @@ impl AsyncApp {
         .interact(Sense::hover())
     }
 
-    pub fn find_icon(&self, wm_class: &str) -> Option<PathBuf> {
-        let mut icon_lookup_builder = lookup(wm_class)
-            .with_size(self.config.icons.lookup_icon_size as u16)
-            .with_cache();
-        let themes = self.config.icons.themes.clone();
-        for theme in themes.iter() {
-            icon_lookup_builder = icon_lookup_builder.with_theme(theme);
+    pub fn window_icon(&self, ui: &mut Ui, win: &HashMap<String, String>) -> egui::Response {
+        let wm_class = win.get("class").expect("qtile sends correct format");
+        let lowercase_wm_class = wm_class.clone().to_lowercase();
+        let lowercase_wm_class = lowercase_wm_class.as_str();
+        let path = self.find_icon(lowercase_wm_class);
+        match path {
+            Some(p) => match p.to_str() {
+                Some(p) => self.new_image(ui, p),
+                None => self.new_image(ui, &self.config.icons.default_icon),
+            },
+            None => match self.find_icon(wm_class) {
+                Some(p) => match p.to_str() {
+                    Some(p) => self.new_image(ui, p),
+                    None => self.new_image(ui, &self.config.icons.default_icon),
+                },
+                None => self.new_image(ui, &self.config.icons.default_icon),
+            },
         }
+    }
 
-        icon_lookup_builder.find()
+    pub fn new_label(&self, ui: &mut Ui, text: &String, font: &egui::FontId) -> egui::Response {
+        ui.add(Label::new(egui::RichText::new(text).font(font.clone())).wrap())
+            .interact(Sense::hover())
+    }
+
+    pub fn window_name(
+        &self,
+        ui: &mut Ui,
+        text_font_id: &egui::FontId,
+        win: &HashMap<String, String>,
+    ) -> egui::Response {
+        let mut name = win.get("name").expect("qtile sends correct format").clone();
+        if name.len() > 31 {
+            let upto = name
+                .char_indices()
+                .map(|(i, _)| i)
+                .nth(30)
+                .unwrap_or(name.len());
+            name.truncate(upto);
+        }
+        self.new_label(ui, &name, text_font_id)
     }
 
     pub fn render_ui(&self, ctx: &eframe::egui::Context, windows: &[HashMap<String, String>]) {
@@ -153,6 +192,7 @@ impl AsyncApp {
             family: FontFamily::Name(self.config.fonts.icon_font.family_name.clone().into()),
         };
         egui::CentralPanel::default().show(ctx, |ui| {
+            // TODO: horizontal layout as well
             let vertical = ui
                 .vertical(|ui| {
                     for (index, win) in windows.iter().enumerate() {
@@ -170,62 +210,32 @@ impl AsyncApp {
                         let group = ui
                             .group(|ui| {
                                 ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                                    let win = win.clone();
-                                    let wm_class =
-                                        win.get("class").expect("qtile sends correct format");
-                                    let lowercase_wm_class = wm_class.clone().to_lowercase();
-                                    let lowercase_wm_class = lowercase_wm_class.as_str();
-
-                                    let path = self.find_icon(lowercase_wm_class);
-
-                                    let _image_response = match path {
-                                        Some(p) => match p.to_str() {
-                                            Some(p) => self.new_image(ui, p),
-                                            None => {
-                                                self.new_image(ui, &self.config.icons.default_icon)
+                                    for item in self.config.ui.items.iter() {
+                                        match item {
+                                            crate::config::UiItem::Icon => {
+                                                self.window_icon(ui, win);
                                             }
-                                        },
-                                        None => match self.find_icon(wm_class) {
-                                            Some(p) => match p.to_str() {
-                                                Some(p) => self.new_image(ui, p),
-                                                None => self
-                                                    .new_image(ui, &self.config.icons.default_icon),
-                                            },
-                                            None => {
-                                                self.new_image(ui, &self.config.icons.default_icon)
+                                            crate::config::UiItem::Name => {
+                                                self.window_name(ui, &text_font_id, win);
                                             }
-                                        },
-                                    };
-
-                                    let mut name = win
-                                        .get("name")
-                                        .expect("qtile sends correct format")
-                                        .clone();
-                                    if name.len() > 31 {
-                                        let upto = name
-                                            .char_indices()
-                                            .map(|(i, _)| i)
-                                            .nth(30)
-                                            .unwrap_or(name.len());
-                                        name.truncate(upto);
+                                            crate::config::UiItem::GroupName => {
+                                                self.new_label(
+                                                    ui,
+                                                    win.get("group_name")
+                                                        .expect("qtile sends correct format"),
+                                                    &text_font_id,
+                                                );
+                                            }
+                                            crate::config::UiItem::GroupLabel => {
+                                                self.new_label(
+                                                    ui,
+                                                    win.get("group_label")
+                                                        .expect("qtile sends correct format"),
+                                                    &icon_font_id,
+                                                );
+                                            }
+                                        }
                                     }
-                                    let _label_response = Self::new_label(ui, &name, &text_font_id)
-                                        .interact(Sense::hover());
-
-                                    // let label_response = Self::new_label(
-                                    //     ui,
-                                    //     win.get("group_name").expect("qtile sends correct format"),
-                                    //     &caskaydia_font_id,
-                                    // )
-                                    // .interact(Sense::hover());
-                                    // sum_of_heights += label_response.rect.height();
-
-                                    let _label_response = Self::new_label(
-                                        ui,
-                                        win.get("group_label").expect("qtile sends correct format"),
-                                        &icon_font_id,
-                                    )
-                                    .interact(Sense::hover());
                                 });
                             })
                             .response
@@ -303,11 +313,6 @@ impl AsyncApp {
             sum_of_heights = vertical;
         });
         let width = (self.config.sizes.window_size.width as i32).to_string();
-        // if self.config.sizes.group_spacing - self.config.sizes.group_rect_stroke_width
-        //     < self.config.sizes.group_rect_stroke_width
-        // {
-        //     sum_of_heights
-        // }
         let height = sum_of_heights.min(self.config.sizes.window_size.height)
             + ctx.style().spacing.window_margin.top
             + ctx.style().spacing.window_margin.bottom

@@ -56,12 +56,30 @@ pub struct Sizes {
     pub window_size: WindowSize,
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+pub struct UiConfig {
+    pub items: Vec<UiItem>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum UiItem {
+    #[serde(rename = "icon")]
+    Icon,
+    #[serde(rename = "name")]
+    Name,
+    #[serde(rename = "group_name")]
+    GroupName,
+    #[serde(rename = "group_label")]
+    GroupLabel,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     pub fonts: Fonts,
     pub colors: Colors,
     pub icons: IconConfig,
     pub sizes: Sizes,
+    pub ui: UiConfig,
 }
 
 impl Default for Config {
@@ -114,6 +132,14 @@ impl Default for Config {
                 group_hover_color: "#B4BEFE".into(),
                 normal_group_color: "#313244".into(),
                 text_color: "#6C7086".into(),
+            },
+            ui: UiConfig {
+                items: vec![
+                    UiItem::Icon,
+                    UiItem::Name,
+                    UiItem::GroupName,
+                    UiItem::GroupLabel,
+                ],
             },
         }
     }
