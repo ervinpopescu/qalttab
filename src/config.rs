@@ -56,9 +56,16 @@ pub struct Sizes {
     pub window_size: WindowSize,
 }
 
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
+pub enum Orientation {
+    Horizontal,
+    Vertical,
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct UiConfig {
     pub items: Vec<UiItem>,
+    pub orientation: Orientation,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -140,6 +147,7 @@ impl Default for Config {
                     UiItem::GroupName,
                     UiItem::GroupLabel,
                 ],
+                orientation: Orientation::Vertical,
             },
         }
     }

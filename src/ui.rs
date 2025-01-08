@@ -4,7 +4,7 @@ use std::{
     sync::mpsc::Receiver,
 };
 
-use crate::config::{Config, Font};
+use crate::config::{Config, Font, Orientation};
 use egui::{
     Color32, FontData, FontDefinitions, FontFamily, Image, ImageSource, Label, Rounding, Sense,
     Stroke, Ui, Vec2,
@@ -193,70 +193,89 @@ impl AsyncApp {
         };
         egui::CentralPanel::default().show(ctx, |ui| {
             // TODO: horizontal layout as well
-            let vertical = ui
-                .vertical(|ui| {
-                    for (index, win) in windows.iter().enumerate() {
-                        ui.style_mut().visuals.widgets.noninteractive.bg_stroke = Stroke {
-                            width: 0.0,
-                            color: Color32::from_hex(self.config.colors.text_color.as_str())
-                                .expect("color from hex"),
-                        };
-                        ui.style_mut().visuals.widgets.noninteractive.fg_stroke = Stroke {
-                            width: 0.0,
-                            color: Color32::from_hex(self.config.colors.text_color.as_str())
-                                .expect("color from hex"),
-                        };
-                        ui.style_mut().interaction.selectable_labels = false;
-                        let group = ui
-                            .group(|ui| {
-                                ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                                    for item in self.config.ui.items.iter() {
-                                        match item {
-                                            crate::config::UiItem::Icon => {
-                                                self.window_icon(ui, win);
+            if self.config.ui.orientation == Orientation::Vertical {
+                let vertical = ui
+                    .vertical(|ui| {
+                        for (index, win) in windows.iter().enumerate() {
+                            ui.style_mut().visuals.widgets.noninteractive.bg_stroke = Stroke {
+                                width: 0.0,
+                                color: Color32::from_hex(self.config.colors.text_color.as_str())
+                                    .expect("color from hex"),
+                            };
+                            ui.style_mut().visuals.widgets.noninteractive.fg_stroke = Stroke {
+                                width: 0.0,
+                                color: Color32::from_hex(self.config.colors.text_color.as_str())
+                                    .expect("color from hex"),
+                            };
+                            ui.style_mut().interaction.selectable_labels = false;
+                            let group = ui
+                                .group(|ui| {
+                                    ui.with_layout(
+                                        egui::Layout::top_down(egui::Align::Center),
+                                        |ui| {
+                                            for item in self.config.ui.items.iter() {
+                                                match item {
+                                                    crate::config::UiItem::Icon => {
+                                                        self.window_icon(ui, win);
+                                                    }
+                                                    crate::config::UiItem::Name => {
+                                                        self.window_name(ui, &text_font_id, win);
+                                                    }
+                                                    crate::config::UiItem::GroupName => {
+                                                        self.new_label(
+                                                            ui,
+                                                            win.get("group_name").expect(
+                                                                "qtile sends correct format",
+                                                            ),
+                                                            &text_font_id,
+                                                        );
+                                                    }
+                                                    crate::config::UiItem::GroupLabel => {
+                                                        self.new_label(
+                                                            ui,
+                                                            win.get("group_label").expect(
+                                                                "qtile sends correct format",
+                                                            ),
+                                                            &icon_font_id,
+                                                        );
+                                                    }
+                                                }
                                             }
-                                            crate::config::UiItem::Name => {
-                                                self.window_name(ui, &text_font_id, win);
-                                            }
-                                            crate::config::UiItem::GroupName => {
-                                                self.new_label(
-                                                    ui,
-                                                    win.get("group_name")
-                                                        .expect("qtile sends correct format"),
-                                                    &text_font_id,
-                                                );
-                                            }
-                                            crate::config::UiItem::GroupLabel => {
-                                                self.new_label(
-                                                    ui,
-                                                    win.get("group_label")
-                                                        .expect("qtile sends correct format"),
-                                                    &icon_font_id,
-                                                );
-                                            }
-                                        }
-                                    }
-                                });
-                            })
-                            .response
-                            .interact(egui::Sense::click())
-                            .on_hover_cursor(egui::CursorIcon::Crosshair);
-                        sum_of_heights += group.rect.height();
+                                        },
+                                    );
+                                })
+                                .response
+                                .interact(egui::Sense::click())
+                                .on_hover_cursor(egui::CursorIcon::Crosshair);
+                            sum_of_heights += group.rect.height();
 
-                        if index != 0 {
-                            if !group.hovered() {
-                                ui.painter().rect_stroke(
-                                    group.rect,
-                                    Rounding::same(10.0),
-                                    Stroke {
-                                        width: self.config.sizes.group_rect_stroke_width,
-                                        color: Color32::from_hex(
-                                            self.config.colors.normal_group_color.as_str(),
-                                        )
-                                        .expect("color from hex"), // Highlight color
-                                    },
-                                );
-                            } else {
+                            if index != 0 {
+                                if !group.hovered() {
+                                    ui.painter().rect_stroke(
+                                        group.rect,
+                                        Rounding::same(10.0),
+                                        Stroke {
+                                            width: self.config.sizes.group_rect_stroke_width,
+                                            color: Color32::from_hex(
+                                                self.config.colors.normal_group_color.as_str(),
+                                            )
+                                            .expect("color from hex"), // Highlight color
+                                        },
+                                    );
+                                } else {
+                                    ui.painter().rect_stroke(
+                                        group.rect,
+                                        Rounding::same(10.0),
+                                        Stroke {
+                                            width: self.config.sizes.group_rect_stroke_width,
+                                            color: Color32::from_hex(
+                                                self.config.colors.group_hover_color.as_str(),
+                                            )
+                                            .expect("color from hex"),
+                                        },
+                                    );
+                                }
+                            } else if !group.hovered() {
                                 ui.painter().rect_stroke(
                                     group.rect,
                                     Rounding::same(10.0),
@@ -268,49 +287,37 @@ impl AsyncApp {
                                         .expect("color from hex"),
                                     },
                                 );
+                            } else {
+                                ui.painter().rect_stroke(
+                                    group.rect,
+                                    Rounding::same(10.0),
+                                    Stroke {
+                                        width: self.config.sizes.group_rect_stroke_width,
+                                        color: Color32::from_hex(
+                                            self.config.colors.normal_group_color.as_str(),
+                                        )
+                                        .expect("color from hex"),
+                                    },
+                                );
                             }
-                        } else if !group.hovered() {
-                            ui.painter().rect_stroke(
-                                group.rect,
-                                Rounding::same(10.0),
-                                Stroke {
-                                    width: self.config.sizes.group_rect_stroke_width,
-                                    color: Color32::from_hex(
-                                        self.config.colors.group_hover_color.as_str(),
-                                    )
-                                    .expect("color from hex"),
-                                },
-                            );
-                        } else {
-                            ui.painter().rect_stroke(
-                                group.rect,
-                                Rounding::same(10.0),
-                                Stroke {
-                                    width: self.config.sizes.group_rect_stroke_width,
-                                    color: Color32::from_hex(
-                                        self.config.colors.normal_group_color.as_str(),
-                                    )
-                                    .expect("color from hex"),
-                                },
-                            );
+                            if group.middle_clicked() {
+                                self.close_window(win);
+                            }
+                            if group.clicked() {
+                                self.focus_window(win);
+                                self.hide_our_window();
+                            };
+                            if index < windows.len() - 1 {
+                                ui.add_space(self.config.sizes.group_spacing);
+                            }
                         }
-                        if group.middle_clicked() {
-                            self.close_window(win);
-                        }
-                        if group.clicked() {
-                            self.focus_window(win);
-                            self.hide_our_window();
-                        };
-                        if index < windows.len() - 1 {
-                            ui.add_space(self.config.sizes.group_spacing);
-                        }
-                    }
-                })
-                .response
-                .rect
-                .height();
-            log::debug!("vertical: {}", vertical);
-            sum_of_heights = vertical;
+                    })
+                    .response
+                    .rect
+                    .height();
+                log::debug!("vertical: {}", vertical);
+                sum_of_heights = vertical;
+            }
         });
         let width = (self.config.sizes.window_size.width as i32).to_string();
         let height = sum_of_heights.min(self.config.sizes.window_size.height)
