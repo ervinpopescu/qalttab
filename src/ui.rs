@@ -40,7 +40,7 @@ impl AsyncApp {
             let bytes = std::fs::read(font_path).unwrap().clone();
             fonts
                 .font_data
-                .insert(font.name.to_owned(), FontData::from_owned(bytes));
+                .insert(font.name.to_owned(), FontData::from_owned(bytes).into());
             fonts
                 .families
                 .get_mut(&FontFamily::Name(family.clone().into()))
