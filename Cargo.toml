@@ -9,7 +9,7 @@ clap = { version = "4.5.27", features = ["derive", "string"] }
 confy = { version = "0.6.1", default-features = false, features = [
   "yaml_conf",
 ] }
-egui = { version = "0.30", features = ["callstack"] }
+egui = { version = "0.31", features = ["callstack"] }
 egui_extras = { version = "0.30", features = ["all_loaders"] }
 eframe = { version = "0.30", default-features = false, features = [
   # "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
