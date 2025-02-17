@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "1.0.95" }
-clap = { version = "4.5.28", features = ["derive", "string"] }
+clap = { version = "4.5.29", features = ["derive", "string"] }
 confy = { version = "0.6.1", default-features = false, features = [
   "yaml_conf",
 ] }
