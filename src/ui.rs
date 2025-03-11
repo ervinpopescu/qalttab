@@ -6,7 +6,7 @@ use std::{
 
 use crate::config::{Config, Font, Orientation};
 use egui::{
-    Color32, FontData, FontDefinitions, FontFamily, Image, ImageSource, Label, Rounding, Sense,
+    Color32, CornerRadius, FontData, FontDefinitions, FontFamily, Image, ImageSource, Label, Sense,
     Stroke, Ui, Vec2,
 };
 use freedesktop_icons::lookup;
@@ -253,7 +253,7 @@ impl AsyncApp {
                                 if !group.hovered() {
                                     ui.painter().rect_stroke(
                                         group.rect,
-                                        Rounding::same(10.0),
+                                        CornerRadius::same(10),
                                         Stroke {
                                             width: self.config.sizes.group_rect_stroke_width,
                                             color: Color32::from_hex(
@@ -261,11 +261,12 @@ impl AsyncApp {
                                             )
                                             .expect("color from hex"), // Highlight color
                                         },
+                                        egui::StrokeKind::Middle,
                                     );
                                 } else {
                                     ui.painter().rect_stroke(
                                         group.rect,
-                                        Rounding::same(10.0),
+                                        CornerRadius::same(10),
                                         Stroke {
                                             width: self.config.sizes.group_rect_stroke_width,
                                             color: Color32::from_hex(
@@ -273,12 +274,13 @@ impl AsyncApp {
                                             )
                                             .expect("color from hex"),
                                         },
+                                        egui::StrokeKind::Middle,
                                     );
                                 }
                             } else if !group.hovered() {
                                 ui.painter().rect_stroke(
                                     group.rect,
-                                    Rounding::same(10.0),
+                                    CornerRadius::same(10),
                                     Stroke {
                                         width: self.config.sizes.group_rect_stroke_width,
                                         color: Color32::from_hex(
@@ -286,11 +288,12 @@ impl AsyncApp {
                                         )
                                         .expect("color from hex"),
                                     },
+                                    egui::StrokeKind::Middle,
                                 );
                             } else {
                                 ui.painter().rect_stroke(
                                     group.rect,
-                                    Rounding::same(10.0),
+                                    CornerRadius::same(10),
                                     Stroke {
                                         width: self.config.sizes.group_rect_stroke_width,
                                         color: Color32::from_hex(
@@ -298,6 +301,7 @@ impl AsyncApp {
                                         )
                                         .expect("color from hex"),
                                     },
+                                    egui::StrokeKind::Middle,
                                 );
                             }
                             if group.middle_clicked() {
@@ -321,8 +325,8 @@ impl AsyncApp {
         });
         let width = (self.config.sizes.window_size.width as i32).to_string();
         let height = sum_of_heights.min(self.config.sizes.window_size.height)
-            + ctx.style().spacing.window_margin.top
-            + ctx.style().spacing.window_margin.bottom
+            + ctx.style().spacing.window_margin.top as f32
+            + ctx.style().spacing.window_margin.bottom as f32
             + self.config.sizes.group_rect_stroke_width;
         log::debug!("height: {}", height);
         let height = (height as i32).to_string();
