@@ -1,4 +1,3 @@
-#![feature(let_chains)]
 use anyhow::bail;
 use clap::Parser;
 use qalttab::{ipc::listen, ui::AsyncApp};
