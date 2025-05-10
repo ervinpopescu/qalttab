@@ -2164,7 +2164,7 @@ dependencies = [
 [[package]]
 name = "qtile-cmd-client"
 version = "0.1.1"
-source = "git+https://github.com/ervinpopescu/qtile-cmd-client#5bcad1c746996b7a28a99f98bc00742fe1ca89c2"
+source = "git+https://github.com/ervinpopescu/qtile-cmd-client#4e6f08f81ad2ace278605c80c644e6f0cc9bc572"
 dependencies = [
  "anyhow",
  "clap",
