@@ -24,7 +24,7 @@ indexmap = { version = "2.10", features = ["serde"] }
 log = { version = "0.4.26" }
 qtile-cmd-client = { git = "https://github.com/ervinpopescu/qtile-cmd-client" }
 serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0.140" }
+serde_json = { version = "1.0.141" }
 simple_logger = { version = "5" }
 sysinfo = { version = "0.36" }
 tokio = { version = "1", features = ["full"] }
