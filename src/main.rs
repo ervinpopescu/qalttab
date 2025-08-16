@@ -1,63 +1,35 @@
-use anyhow::bail;
 use clap::Parser;
-use qalttab::{ipc::listen, ui::AsyncApp};
-use std::sync::mpsc::channel;
-use sysinfo::{Pid, System};
-use tokio::runtime::Runtime;
-/// Qtile alttab window
-#[derive(Parser, Debug, Clone)]
-#[command(version, about, long_about = None)]
-pub struct Args {}
+use qalttab::ui::AppEvent;
+use tokio::sync::mpsc::unbounded_channel;
 
-#[cfg(not(target_arch = "wasm32"))]
-fn main() -> anyhow::Result<()> {
-    let rt = Runtime::new().expect("Unable to create Runtime");
+use qalttab::args::Args;
 
-    let _enter = rt.enter();
-
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     simple_logger::SimpleLogger::new()
+        .with_module_level("wgpu_hal", log::LevelFilter::Warn)
+        .with_module_level("egui_wgpu", log::LevelFilter::Warn)
         .with_level(log::LevelFilter::Info)
         .with_colors(true)
         .env()
         .init()
         .unwrap();
     let _args: Args = Args::parse();
-    let (tx, rx) = channel();
-    std::thread::spawn(move || rt.block_on(async { listen(tx.clone()) }));
-    // Run the GUI in the main thread.
+    let (tx, rx) = unbounded_channel::<AppEvent>();
+    // Spawn the UNIX socket listener
+    let tx_socket = tx.clone();
+    tokio::spawn(async move {
+        if let Err(e) = qalttab::ipc::listen(tx_socket).await {
+            eprintln!("Unix socket listener error: {e:?}");
+        }
+    });
 
-    let s = System::new_all();
-    let qalttab_processes_parents = s
-        .processes_by_exact_name("qalttab".as_ref())
-        .map(|p| p.parent());
-    let mut qalttab_processes_vec = qalttab_processes_parents.collect::<Vec<Option<Pid>>>();
-    qalttab_processes_vec.sort();
-    qalttab_processes_vec.dedup();
-    if qalttab_processes_vec.len() >= 4 {
-        bail!("qalttab already running");
-    };
-    match eframe::run_native(
-        "qalttab",
-        eframe::NativeOptions {
-            viewport: egui::ViewportBuilder {
-                title: Some("qalttab".to_owned()),
-                app_id: Some("qalttab".to_owned()),
-                // resizable: Some(false),
-                // transparent: Some(true),
-                decorations: Some(false),
-                visible: Some(false),
-                taskbar: Some(false),
-                title_shown: Some(false),
-                window_level: Some(egui::WindowLevel::AlwaysOnTop),
-                ..egui::ViewportBuilder::default()
-            },
-            // event_loop_builder: Some(Box::new(|elb| {})),
-            // window_builder: Some(Box::new(|vb| {})),
-            ..eframe::NativeOptions::default()
-        },
-        Box::new(|cc| Ok(Box::<AsyncApp>::new(AsyncApp::new(cc, Some(rx))))),
-    ) {
-        Ok(()) => Ok(()),
-        Err(e) => bail!("eframe crashed: {}", e),
-    }
+    // Spawn the Alt key release listener
+    let tx_alt = tx.clone();
+    tokio::spawn(async move {
+        if let Err(e) = qalttab::qaltd::listen_for_alt_release(tx_alt).await {
+            eprintln!("qaltd listener error: {e:?}");
+        }
+    });
+    qalttab::ui::run_ui(rx)
 }

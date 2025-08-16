@@ -1,10 +1,10 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::mpsc::Receiver,
 };
 
 use crate::config::{Config, Font, Orientation};
+use anyhow::bail;
 use egui::{
     Color32, CornerRadius, FontData, FontDefinitions, FontFamily, Image, ImageSource, Label, Sense,
     Stroke, Ui, Vec2,
@@ -12,18 +12,27 @@ use egui::{
 use freedesktop_icons::lookup;
 use qtile_client_lib::utils::client::InteractiveCommandClient;
 use serde_json::Value;
-
-pub struct AsyncApp {
-    rx: Option<Receiver<Response>>,
-    current_focus_history: Option<Response>,
-    previous_focus_history: Option<Response>,
-    config: Config,
-}
+use sysinfo::{Pid, System};
+use tokio::sync::mpsc::UnboundedReceiver;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Response {
     pub message_type: MessageType,
     pub windows: Vec<HashMap<String, String>>,
+}
+
+#[derive(Debug, Clone)]
+pub enum AppEvent {
+    AltReleased,
+    UnixSocketMsg(Response),
+    // Add more as needed
+}
+
+pub struct AsyncApp {
+    rx: Option<UnboundedReceiver<AppEvent>>,
+    current_focus_history: Option<AppEvent>,
+    previous_focus_history: Option<AppEvent>,
+    config: Config,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -60,12 +69,12 @@ impl AsyncApp {
             Vec::new(),
         )]);
     }
-    pub fn new(cc: &eframe::CreationContext<'_>, rx: Option<Receiver<Response>>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, rx: Option<UnboundedReceiver<AppEvent>>) -> Self {
         let cfg: Result<Config, confy::ConfyError> = confy::load("qalttab", Some("config"));
         let fonts = &mut FontDefinitions::default();
         let config = match cfg {
             Ok(cfg) => {
-                log::debug!("Loaded config: {:#?}", cfg);
+                log::debug!("Loaded config: {cfg:#?}");
                 let (cfg_family, cfg_text_fonts) =
                     (&cfg.fonts.text_font.family_name, &cfg.fonts.text_font.fonts);
                 Self::add_font_family(fonts, cfg_family.clone());
@@ -126,7 +135,7 @@ impl AsyncApp {
 
     pub fn new_image(&self, ui: &mut Ui, path: &str) -> egui::Response {
         ui.add(
-            Image::new(ImageSource::Uri(format!("file://{}", path).into())).max_size(Vec2 {
+            Image::new(ImageSource::Uri(format!("file://{path}").into())).max_size(Vec2 {
                 x: self.config.icons.visible_icon_size,
                 y: self.config.icons.visible_icon_size,
             }),
@@ -319,7 +328,7 @@ impl AsyncApp {
                     .response
                     .rect
                     .height();
-                log::debug!("vertical: {}", vertical);
+                log::debug!("vertical: {vertical}");
                 sum_of_heights = vertical;
             }
         });
@@ -328,7 +337,7 @@ impl AsyncApp {
             + ctx.style().spacing.window_margin.top as f32
             + ctx.style().spacing.window_margin.bottom as f32
             + self.config.sizes.group_rect_stroke_width;
-        log::debug!("height: {}", height);
+        log::debug!("height: {height}");
         let height = (height as i32).to_string();
         self.place_our_window(width, height);
         ctx.request_repaint();
@@ -369,7 +378,8 @@ impl AsyncApp {
         let response = InteractiveCommandClient::call(
             Some(vec![]),
             Some("eval".into()),
-            Some(vec![r#"__import__("json").dumps(
+            Some(vec![
+                r#"__import__("json").dumps(
             [
                 {
                     "name": self.windows_map[wid].name,
@@ -380,7 +390,8 @@ impl AsyncApp {
                 and hasattr(self.windows_map[wid], "wid")
             ]
         )"#
-            .into()]),
+                .into(),
+            ]),
             false,
         )
         .expect("qtile has a `windows_map`");
@@ -462,31 +473,74 @@ impl eframe::App for AsyncApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
         // Check for new messages and display them
-        if let Some(receiver) = &self.rx {
+        if let Some(receiver) = &mut self.rx {
             while let Ok(message) = receiver.try_recv() {
                 self.current_focus_history = Some(message);
             }
         };
-        if let Some(current_focus_history) = &self.current_focus_history {
+        if let Some(current_focus_history) = &self.current_focus_history
+            && let AppEvent::UnixSocketMsg(current_focus_history) = current_focus_history
+        {
             self.render_ui(ctx, &current_focus_history.windows);
             match current_focus_history.message_type {
                 MessageType::CycleWindows => {
-                    if let Some(previous_focus_history) = &self.previous_focus_history {
-                        if current_focus_history.windows != previous_focus_history.windows {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-                            self.render_ui(ctx, &current_focus_history.windows);
-                            self.previous_focus_history = Some(current_focus_history.clone());
-                        }
+                    if let Some(previous_focus_history) = &self.previous_focus_history
+                        && let AppEvent::UnixSocketMsg(previous_focus_history) =
+                            previous_focus_history
+                        && current_focus_history.windows != previous_focus_history.windows
+                    {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                        self.render_ui(ctx, &current_focus_history.windows);
+                        self.previous_focus_history =
+                            Some(AppEvent::UnixSocketMsg(current_focus_history.clone()));
                     }
                 }
                 MessageType::ClientFocus => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
                     self.render_ui(ctx, &current_focus_history.windows);
-                    self.previous_focus_history = Some(current_focus_history.clone());
+                    self.previous_focus_history =
+                        Some(AppEvent::UnixSocketMsg(current_focus_history.clone()));
                 }
                 MessageType::None => todo!(),
             }
         }
         ctx.request_repaint();
+    }
+}
+
+pub fn run_ui(rx: UnboundedReceiver<AppEvent>) -> anyhow::Result<()> {
+    let s = System::new_all();
+    let qalttab_processes_parents = s
+        .processes_by_exact_name("qalttab".as_ref())
+        .map(|p| p.parent());
+    let mut qalttab_processes_vec = qalttab_processes_parents.collect::<Vec<Option<Pid>>>();
+    qalttab_processes_vec.sort();
+    qalttab_processes_vec.dedup();
+    if qalttab_processes_vec.len() >= 4 {
+        bail!("qalttab already running");
+    };
+    match eframe::run_native(
+        "qalttab",
+        eframe::NativeOptions {
+            viewport: egui::ViewportBuilder {
+                title: Some("qalttab".to_owned()),
+                app_id: Some("qalttab".to_owned()),
+                // resizable: Some(false),
+                // transparent: Some(true),
+                decorations: Some(false),
+                visible: Some(false),
+                taskbar: Some(false),
+                title_shown: Some(false),
+                window_level: Some(egui::WindowLevel::AlwaysOnTop),
+                ..egui::ViewportBuilder::default()
+            },
+            // event_loop_builder: Some(Box::new(|elb| {})),
+            // window_builder: Some(Box::new(|vb| {})),
+            ..eframe::NativeOptions::default()
+        },
+        Box::new(|cc| Ok(Box::<AsyncApp>::new(AsyncApp::new(cc, Some(rx))))),
+    ) {
+        Ok(()) => Ok(()),
+        Err(e) => bail!("eframe crashed: {}", e),
     }
 }

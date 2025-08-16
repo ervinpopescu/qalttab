@@ -3,33 +3,34 @@ use std::{
     io::{Read, Write},
     os::unix::net::{UnixListener, UnixStream},
     path::Path,
-    sync::mpsc::Sender,
 };
+use tokio::sync::mpsc::UnboundedSender;
 
 use anyhow::bail;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use crate::ui::{MessageType, Response};
+use crate::ui::{AppEvent, MessageType, Response};
 
-pub fn listen(tx: Sender<Response>) -> anyhow::Result<()> {
+pub async fn listen(tx: UnboundedSender<AppEvent>) -> anyhow::Result<()> {
+    let wayland_display = std::env::var("WAYLAND_DISPLAY").unwrap_or("wayland-0".to_owned());
     let socket_path: &Path =
         &Path::new(&std::env::var("XDG_CACHE_HOME").unwrap_or("~/cache".to_owned()))
             .join("qtile")
-            .join("qalttab.wayland-0");
+            .join(format!("qalttab.{wayland_display}"));
 
     if socket_path.exists() {
         std::fs::remove_file(socket_path)?;
     }
     let listener = UnixListener::bind(socket_path)?;
-    log::info!("Server listening on {:?}", socket_path);
+    log::info!(r#"Server listening on {socket_path:?}"#);
 
     // Accept incoming connections in a loop
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                handle_conn(stream, &tx)?;
+                handle_conn(stream, &tx).await?;
             }
-            Err(e) => log::error!("Error accepting connection: {}", e),
+            Err(e) => log::error!("Error accepting connection: {e}"),
         }
     }
     std::fs::remove_file(socket_path).unwrap_or_else(|_| {
@@ -38,12 +39,15 @@ pub fn listen(tx: Sender<Response>) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn handle_conn(mut stream: UnixStream, tx: &Sender<Response>) -> anyhow::Result<()> {
+pub async fn handle_conn(
+    mut stream: UnixStream,
+    tx: &UnboundedSender<AppEvent>,
+) -> anyhow::Result<()> {
     let mut buffer = [0; 4096];
     let bytes_read = stream.read(&mut buffer)?;
     let slice = &buffer[..bytes_read];
     let success = json!({"message": "success"});
-    stream.write_fmt(format_args!("{}", success))?;
+    stream.write_fmt(format_args!("{success}"))?;
     let response: Result<HashMap<String, Value>, serde_json::Error> = serde_json::from_slice(slice);
     match response {
         Ok(response) => {
@@ -77,15 +81,15 @@ pub fn handle_conn(mut stream: UnixStream, tx: &Sender<Response>) -> anyhow::Res
                         .collect(),
                     Value::Object(_) => todo!(),
                 };
-            match tx.send(Response {
+            match tx.send(AppEvent::UnixSocketMsg(Response {
                 message_type,
                 windows,
-            }) {
+            })) {
                 Ok(r) => r,
-                Err(e) => log::error!("could not send message to GUI thread: {}", e),
+                Err(e) => log::error!("could not send message to GUI thread: {e}"),
             }
         }
-        Err(e) => log::error!("{}", e),
+        Err(e) => log::error!("{e}"),
     }
     Ok(())
 }
