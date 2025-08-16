@@ -4,27 +4,22 @@ version = "0.1.1"
 edition = "2024"
 
 [dependencies]
-anyhow = { version = "1.0.98" }
-clap = { version = "4.5.43", features = ["derive", "string"] }
-confy = { version = "1.0.0", default-features = false, features = [
-  "yaml_conf",
-] }
-egui = { version = "0.31", features = ["callstack"] }
-egui_extras = { version = "0.31", features = ["all_loaders"] }
-eframe = { version = "0.31", default-features = false, features = [
-  # "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
+anyhow = { version = "1.0" }
+clap = { version = "4.5", features = ["derive", "string"] }
+confy = { version = "1", default-features = false, features = ["yaml_conf"] }
+egui = { version = "0.32", features = ["callstack"] }
+egui_extras = { version = "0.32", features = ["all_loaders"] }
+eframe = { version = "0.32", features = [
   "default_fonts", # Embed the default egui fonts.
-  "wgpu",
-  # "glow",
-  "persistence", # Enable restoring app state when restarting the app.
+  "persistence",   # Enable restoring app state when restarting the app.
 ] }
-freedesktop-icons = { version = "0.4.0" }
+freedesktop-icons = { version = "0.4" }
 indexmap = { version = "2.10", features = ["serde"] }
-log = { version = "0.4.26" }
+log = { version = "0.4" }
 qtile-cmd-client = { git = "https://github.com/ervinpopescu/qtile-cmd-client" }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0.142" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
 simple_logger = { version = "5" }
 sysinfo = { version = "0.37" }
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.47", features = ["full"] }
 winit = { version = "0.30" }
