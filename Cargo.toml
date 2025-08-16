@@ -1,8 +1,7 @@
 [package]
 name = "qalttab"
 version = "0.1.1"
-edition = "2021"
-rust-version = "1.84.1"
+edition = "2024"
 
 [dependencies]
 anyhow = { version = "1.0.98" }
