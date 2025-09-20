@@ -925,7 +925,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.60.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2876,7 +2876,7 @@ dependencies = [
 [[package]]
 name = "qtile-cmd-client"
 version = "0.1.1"
-source = "git+https://github.com/ervinpopescu/qtile-cmd-client#44348a42eff1e6f8759d549c89edf281388e95f2"
+source = "git+https://github.com/ervinpopescu/qtile-cmd-client#fd88d1d2280f82958b079bfc06164c5e5bee8979"
 dependencies = [
  "anyhow",
  "clap",
