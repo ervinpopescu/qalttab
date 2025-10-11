@@ -9,7 +9,7 @@ clap = { version = "4.5", features = ["derive", "string"] }
 confy = { version = "1", default-features = false, features = ["yaml_conf"] }
 egui = { version = "0.32", features = ["callstack"] }
 egui_extras = { version = "0.32", features = ["all_loaders"] }
-eframe = { version = "0.32", features = [
+eframe = { version = "0.33", features = [
   "default_fonts", # Embed the default egui fonts.
   "persistence",   # Enable restoring app state when restarting the app.
 ] }
