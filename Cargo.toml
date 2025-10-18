@@ -14,7 +14,7 @@ eframe = { version = "0.32", features = [
   "persistence",   # Enable restoring app state when restarting the app.
 ] }
 freedesktop-icons = { version = "0.4" }
-indexmap = { version = "2.11", features = ["serde"] }
+indexmap = { version = "2.12", features = ["serde"] }
 log = { version = "0.4" }
 qtile-cmd-client = { git = "https://github.com/ervinpopescu/qtile-cmd-client" }
 serde = { version = "1", features = ["derive"] }
