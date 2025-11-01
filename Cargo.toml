@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = { version = "1.0" }
 clap = { version = "4.5", features = ["derive", "string"] }
-confy = { version = "1", default-features = false, features = ["yaml_conf"] }
+confy = { version = "2", default-features = false, features = ["yaml_conf"] }
 egui = { version = "0.33.0", features = ["callstack"] }
 egui_extras = { version = "0.33.0", features = ["all_loaders"] }
 eframe = { version = "0.33.0", features = [
