@@ -62,13 +62,13 @@ pub enum Orientation {
     Vertical,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub struct UiConfig {
     pub items: Vec<UiItem>,
     pub orientation: Orientation,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum UiItem {
     #[serde(rename = "icon")]
     Icon,
@@ -150,5 +150,118 @@ impl Default for Config {
                 orientation: Orientation::Vertical,
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_defaults() {
+        let config = Config::default();
+        assert_eq!(config.ui.orientation, Orientation::Vertical);
+        assert!(!config.ui.items.is_empty());
+        assert!(!config.fonts.text_font.fonts.is_empty());
+        assert!(!config.fonts.icon_font.fonts.is_empty());
+        assert!(config.sizes.group_spacing > 0.0);
+        assert!(config.sizes.window_size.width > 0.0);
+        assert!(config.sizes.window_size.height > 0.0);
+        assert!(config.colors.bg_color.starts_with('#'));
+        assert_eq!(config.colors.bg_color.len(), 7);
+        assert!(!config.icons.themes.is_empty());
+        assert!(config.icons.visible_icon_size > 0.0);
+    }
+
+    #[test]
+    fn test_config_serde() {
+        let config = Config::default();
+        let serialized = serde_json::to_string(&config).unwrap();
+        let deserialized: Config = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(config.ui.orientation, deserialized.ui.orientation);
+        assert_eq!(
+            config.fonts.text_font.family_name,
+            deserialized.fonts.text_font.family_name
+        );
+    }
+
+    #[test]
+    fn test_custom_config() {
+        let mut config = Config::default();
+        config.ui.orientation = Orientation::Horizontal;
+        config.sizes.group_spacing = 15.5;
+        config.colors.bg_color = "#000000".to_string();
+
+        let serialized = serde_json::to_string(&config).unwrap();
+        let deserialized: Config = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized.ui.orientation, Orientation::Horizontal);
+        assert_eq!(deserialized.sizes.group_spacing, 15.5);
+        assert_eq!(deserialized.colors.bg_color, "#000000");
+    }
+
+    #[test]
+    fn test_font_utils() {
+        let name = "Test Font";
+        let path = "/path/to/font.ttf";
+        let font = Font::new(name, path);
+        assert_eq!(font.name, name);
+        assert_eq!(font.path, path);
+
+        let f1 = Font::new("N", "P");
+        let f2 = Font::new("N", "P");
+        let f3 = Font::new("N", "P2");
+        assert_eq!(f1.name, f2.name);
+        assert_ne!(f1.path, f3.path);
+    }
+
+    #[test]
+    fn test_sub_struct_serde() {
+        let size = WindowSize {
+            width: 100.0,
+            height: 200.0,
+        };
+        let s_serialized = serde_json::to_string(&size).unwrap();
+        let s_deserialized: WindowSize = serde_json::from_str(&s_serialized).unwrap();
+        assert_eq!(size.width, s_deserialized.width);
+
+        let colors = Colors {
+            bg_color: "#123456".into(),
+            text_color: "#ffffff".into(),
+            normal_group_color: "#000000".into(),
+            group_hover_color: "#ff0000".into(),
+        };
+        let c_serialized = serde_json::to_string(&colors).unwrap();
+        let c_deserialized: Colors = serde_json::from_str(&c_serialized).unwrap();
+        assert_eq!(colors.bg_color, c_deserialized.bg_color);
+
+        assert_eq!(
+            serde_json::from_str::<Orientation>("\"Horizontal\"").unwrap(),
+            Orientation::Horizontal
+        );
+        assert_eq!(
+            serde_json::from_str::<UiItem>("\"icon\"").unwrap(),
+            UiItem::Icon
+        );
+    }
+
+    #[test]
+    fn test_font_family_logic() {
+        let config = Config::default();
+        let serialized = serde_json::to_string(&config.fonts).unwrap();
+        let deserialized: Fonts = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(
+            config.fonts.text_font.family_name,
+            deserialized.text_font.family_name
+        );
+
+        let ff = FontFamily {
+            family_name: "Test".into(),
+            fonts: vec![Font::new("F1", "P1")],
+            size: 10.0,
+        };
+        let ff_s = serde_json::to_string(&ff).unwrap();
+        let ff_d: FontFamily = serde_json::from_str(&ff_s).unwrap();
+        assert_eq!(ff.family_name, ff_d.family_name);
     }
 }
