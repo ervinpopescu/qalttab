@@ -7,17 +7,72 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-and-check:
+  fmt:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: Check formatting
+      run: cargo fmt -- --check
+
+  check:
+    needs: fmt
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: Rust Cargo cache
+      uses: raviqqe/cargo-cache@v1
+    - name: Check
+      run: cargo check
+
+  clippy:
+    needs: check
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: Rust Cargo cache
+      uses: raviqqe/cargo-cache@v1
+    - name: Clippy lints
+      run: cargo clippy -- -D warnings
+
+  test:
+    needs: clippy
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
     - name: Rust Cargo cache
       uses: raviqqe/cargo-cache@v1
     - name: Build
-      run: cargo build -q
-    - name: Check
-      run: cargo check -q
+      run: cargo build -v
+    - name: Run tests
+      run: cargo test --lib --tests
+
+  coverage:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: Rust Cargo cache
+      uses: raviqqe/cargo-cache@v1
+    - name: Install tarpaulin
+      run: cargo install cargo-tarpaulin
+    - name: Generate coverage report
+      run: cargo tarpaulin --ignore-tests -v --out Xml --output-dir target/tarpaulin
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        files: ./target/tarpaulin/tarpaulin.xml
+        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
+    - name: Upload coverage report artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: code-coverage-report
+        path: target/tarpaulin/tarpaulin.xml
