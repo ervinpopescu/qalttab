@@ -68,7 +68,7 @@ pub struct UiConfig {
     pub orientation: Orientation,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum UiItem {
     #[serde(rename = "icon")]
     Icon,
