@@ -1,7 +1,4 @@
 use clap::Parser;
-use qalttab::ui::AppEvent;
-use tokio::sync::mpsc::unbounded_channel;
-
 use qalttab::args::Args;
 
 #[tokio::main]
@@ -12,24 +9,13 @@ async fn main() -> anyhow::Result<()> {
         .with_level(log::LevelFilter::Info)
         .with_colors(true)
         .env()
-        .init()
-        .unwrap();
+        .init()?;
     let _args: Args = Args::parse();
-    let (tx, rx) = unbounded_channel::<AppEvent>();
-    // Spawn the UNIX socket listener
-    let tx_socket = tx.clone();
-    tokio::spawn(async move {
-        if let Err(e) = qalttab::ipc::listen(tx_socket).await {
-            eprintln!("Unix socket listener error: {e:?}");
-        }
-    });
+    
+    // Unset DISPLAY to prevent arboard (used by eframe) from hanging on Xwayland connections
+    unsafe {
+        std::env::remove_var("DISPLAY");
+    }
 
-    // Spawn the Alt key release listener
-    let tx_alt = tx.clone();
-    tokio::spawn(async move {
-        if let Err(e) = qalttab::qaltd::listen_for_alt_release(tx_alt).await {
-            eprintln!("qaltd listener error: {e:?}");
-        }
-    });
-    qalttab::ui::run_ui(rx)
+    qalttab::ui::run_ui()
 }

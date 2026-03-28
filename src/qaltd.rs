@@ -3,7 +3,10 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc::UnboundedSender;
 
-pub async fn listen_for_alt_release(tx: UnboundedSender<AppEvent>) -> anyhow::Result<()> {
+pub async fn listen_for_alt_release(
+    tx: UnboundedSender<AppEvent>,
+    ctx: egui::Context,
+) -> anyhow::Result<()> {
     let mut child = Command::new("libinput")
         .args(["debug-events", "--show-keycodes"])
         .stdout(std::process::Stdio::piped())
@@ -20,13 +23,7 @@ pub async fn listen_for_alt_release(tx: UnboundedSender<AppEvent>) -> anyhow::Re
         {
             log::debug!("Alt released");
             tx.send(AppEvent::AltReleased).ok();
-
-            // Still notify Qtile
-            let _ = Command::new("qticc")
-                .args(["cmd-obj", "-f", "fire_user_hook", "-a", "alt_release"])
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn();
+            ctx.request_repaint();
         }
     }
 

@@ -2933,6 +2933,7 @@ dependencies = [
  "qtile-cmd-client",
  "serde",
  "serde_json",
+ "shellexpand",
  "simple_logger",
  "sysinfo",
  "tokio",
