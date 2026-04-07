@@ -7,8 +7,8 @@ use std::{
 use crate::config::{Config, Font, Orientation};
 use anyhow::bail;
 use egui::{
-    Color32, FontData, FontDefinitions, FontFamily, Image, ImageSource, Label, Sense,
-    Stroke, Vec2, Ui,
+    Color32, FontData, FontDefinitions, FontFamily, Image, ImageSource, Label, Sense, Stroke, Ui,
+    Vec2,
 };
 use freedesktop_icons::lookup;
 use qtile_client_lib::utils::client::InteractiveCommandClient;
@@ -54,17 +54,31 @@ pub enum MessageType {
     None,
 }
 
+/// Truncate `name` to at most `max_chars` characters, respecting Unicode char boundaries.
+pub fn truncate_window_name(name: &str, max_chars: usize) -> String {
+    if name.chars().count() > max_chars {
+        let upto = name
+            .char_indices()
+            .nth(max_chars)
+            .map(|(i, _)| i)
+            .unwrap_or(name.len());
+        name[..upto].to_string()
+    } else {
+        name.to_string()
+    }
+}
+
 impl AsyncApp {
-    pub fn add_font(fonts: &mut FontDefinitions, family: String, font: &Font) {
+    pub fn add_font(fonts: &mut FontDefinitions, family: &str, font: &Font) {
         let font_path = Path::new(&font.path);
         if Path::exists(font_path) {
-            let bytes = std::fs::read(font_path).unwrap().clone();
+            let bytes = std::fs::read(font_path).unwrap();
             fonts
                 .font_data
                 .insert(font.name.to_owned(), FontData::from_owned(bytes).into());
             fonts
                 .families
-                .get_mut(&FontFamily::Name(family.clone().into()))
+                .get_mut(&FontFamily::Name(family.into()))
                 .unwrap()
                 .insert(0, font.name.to_owned());
         } else {
@@ -75,11 +89,10 @@ impl AsyncApp {
             )
         }
     }
-    pub fn add_font_family(fonts: &mut FontDefinitions, font_family_name: String) {
-        fonts.families.extend([(
-            FontFamily::Name(font_family_name.clone().into()),
-            Vec::new(),
-        )]);
+    pub fn add_font_family(fonts: &mut FontDefinitions, font_family_name: &str) {
+        fonts
+            .families
+            .extend([(FontFamily::Name(font_family_name.into()), Vec::new())]);
     }
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let (tx, mut rx) = unbounded_channel::<AppEvent>();
@@ -137,7 +150,8 @@ impl AsyncApp {
                         ]),
                         false,
                     )
-                }).await;
+                })
+                .await;
 
                 log::debug!("WID discovery result: {:?}", res);
                 if let Ok(Ok(val)) = res {
@@ -145,32 +159,28 @@ impl AsyncApp {
                         Value::Array(mut a) if a.len() == 2 => a.remove(1),
                         _ => val,
                     };
-                    if let Ok(json_str) = serde_json::from_value::<String>(val) {
-                        if let Ok(windows) = serde_json::from_str::<Vec<HashMap<String, String>>>(&json_str) {
-                            if let Some(win) = windows.iter().find(|m| {
-                                m.get("name").map(|s| s.as_str()) == Some("qalttab")
-                            }) {
-                                if let Some(wid) = win.get("wid") {
-                                    log::info!("Discovered our Window ID: {}", wid);
-                                    // cached_wid is used later to close window
-                                    cached_wid = Some(wid.clone());
-                                    shared_clone.lock().unwrap().cached_wid = Some(wid.clone());
-                                    // Hide off-screen initially
-                                    let wid_c = wid.clone();
-                                    tokio::task::spawn_blocking(move || {
-                                        let _ = InteractiveCommandClient::call(
-                                            Some(vec![]),
-                                            Some("eval".into()),
-                                            Some(vec![format!(
-                                                "self.windows_map[{wid_c}].hide()"
-                                            )]),
-                                            false,
-                                        );
-                                    });
-                                    break;
-                                }
-                            }
-                        }
+                    if let Ok(json_str) = serde_json::from_value::<String>(val)
+                        && let Ok(windows) =
+                            serde_json::from_str::<Vec<HashMap<String, String>>>(&json_str)
+                        && let Some(win) = windows
+                            .iter()
+                            .find(|m| m.get("name").map(|s| s.as_str()) == Some("qalttab"))
+                        && let Some(wid) = win.get("wid")
+                    {
+                        log::info!("Discovered our Window ID: {}", wid);
+                        cached_wid = Some(wid.clone());
+                        shared_clone.lock().unwrap().cached_wid = Some(wid.clone());
+                        // Hide off-screen initially
+                        let wid_c = wid.clone();
+                        tokio::task::spawn_blocking(move || {
+                            let _ = InteractiveCommandClient::call(
+                                Some(vec![]),
+                                Some("eval".into()),
+                                Some(vec![format!("self.windows_map[{wid_c}].hide()")]),
+                                false,
+                            );
+                        });
+                        break;
                     }
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -183,10 +193,10 @@ impl AsyncApp {
                         log::debug!("AltReleased event | cycle_active={}", cycle_active);
                         if cycle_active {
                             // Schedule hide after delay — cancelled if new CycleWindows arrives
-                            if let Some(ref handle) = pending_hide {
-                                if !handle.is_finished() {
-                                    continue; // still running
-                                }
+                            if let Some(ref handle) = pending_hide
+                                && !handle.is_finished()
+                            {
+                                continue; // still running
                             }
                             let shared_hide = shared_clone.clone();
                             let wid_hide = cached_wid.clone();
@@ -198,12 +208,12 @@ impl AsyncApp {
                                         let _ = InteractiveCommandClient::call(
                                             Some(vec![]),
                                             Some("eval".into()),
-                                            Some(vec![format!(
-                                                "self.windows_map[{wid}].hide()"
-                                            )]),
+                                            Some(vec![format!("self.windows_map[{wid}].hide()")]),
                                             false,
                                         );
-                                    }).await.ok();
+                                    })
+                                    .await
+                                    .ok();
                                 }
                                 {
                                     let mut state = shared_hide.lock().unwrap();
@@ -218,7 +228,9 @@ impl AsyncApp {
                                         Some(vec!["alt_release".to_owned()]),
                                         false,
                                     );
-                                }).await.ok();
+                                })
+                                .await
+                                .ok();
                             }));
                             cycle_active = false;
                         }
@@ -244,8 +256,16 @@ impl AsyncApp {
                                 // Unhide + place centered with last known size
                                 let (w, h) = {
                                     let st = shared_clone.lock().unwrap();
-                                    let w = if st.last_width > 0 { st.last_width } else { 300 };
-                                    let h = if st.last_height > 0 { st.last_height } else { 400 };
+                                    let w = if st.last_width > 0 {
+                                        st.last_width
+                                    } else {
+                                        300
+                                    };
+                                    let h = if st.last_height > 0 {
+                                        st.last_height
+                                    } else {
+                                        400
+                                    };
                                     (w, h)
                                 };
                                 if let Some(wid) = cached_wid.clone() {
@@ -310,21 +330,21 @@ impl AsyncApp {
         });
 
         let cfg: Result<Config, confy::ConfyError> = confy::load("qalttab", Some("config"));
-        let fonts = &mut FontDefinitions::default();
+        let mut fonts = FontDefinitions::default();
         let config = match cfg {
             Ok(cfg) => {
                 log::debug!("Loaded config: {cfg:#?}");
                 let (cfg_family, cfg_text_fonts) =
                     (&cfg.fonts.text_font.family_name, &cfg.fonts.text_font.fonts);
-                Self::add_font_family(fonts, cfg_family.clone());
-                for font in cfg_text_fonts.iter() {
-                    Self::add_font(fonts, cfg_family.clone(), font);
+                Self::add_font_family(&mut fonts, cfg_family.as_str());
+                for font in cfg_text_fonts {
+                    Self::add_font(&mut fonts, cfg_family.as_str(), font);
                 }
                 let (cfg_family, cfg_icon_fonts) =
                     (&cfg.fonts.icon_font.family_name, &cfg.fonts.icon_font.fonts);
-                Self::add_font_family(fonts, cfg_family.clone());
-                for font in cfg_icon_fonts.iter() {
-                    Self::add_font(fonts, cfg_family.clone(), font);
+                Self::add_font_family(&mut fonts, cfg_family.as_str());
+                for font in cfg_icon_fonts {
+                    Self::add_font(&mut fonts, cfg_family.as_str(), font);
                 }
                 cfg
             }
@@ -335,35 +355,31 @@ impl AsyncApp {
                     &def_cfg.fonts.text_font.family_name,
                     &def_cfg.fonts.text_font.fonts,
                 );
-                Self::add_font_family(fonts, def_cfg_family.clone());
-                for font in def_cfg_text_fonts.iter() {
-                    Self::add_font(fonts, def_cfg_family.clone(), font);
+                Self::add_font_family(&mut fonts, def_cfg_family.as_str());
+                for font in def_cfg_text_fonts {
+                    Self::add_font(&mut fonts, def_cfg_family.as_str(), font);
                 }
                 let (def_cfg_icon_family, def_cfg_icon_fonts) = (
                     &def_cfg.fonts.icon_font.family_name,
                     &def_cfg.fonts.icon_font.fonts,
                 );
-                Self::add_font_family(fonts, def_cfg_icon_family.clone());
-                for font in def_cfg_icon_fonts.iter() {
-                    Self::add_font(fonts, def_cfg_icon_family.clone(), font);
+                Self::add_font_family(&mut fonts, def_cfg_icon_family.as_str());
+                for font in def_cfg_icon_fonts {
+                    Self::add_font(&mut fonts, def_cfg_icon_family.as_str(), font);
                 }
                 def_cfg
             }
         };
-        cc.egui_ctx.set_fonts(fonts.clone());
+        cc.egui_ctx.set_fonts(fonts);
         egui_extras::install_image_loaders(&cc.egui_ctx);
-        Self {
-            shared,
-            config,
-        }
+        Self { shared, config }
     }
 
     pub fn find_icon(&self, wm_class: &str) -> Option<PathBuf> {
         let mut icon_lookup_builder = lookup(wm_class)
             .with_size(self.config.icons.lookup_icon_size as u16)
             .with_cache();
-        let themes = self.config.icons.themes.clone();
-        for theme in themes.iter() {
+        for theme in &self.config.icons.themes {
             icon_lookup_builder = icon_lookup_builder.with_theme(theme);
         }
 
@@ -382,9 +398,8 @@ impl AsyncApp {
 
     pub fn window_icon(&self, ui: &mut Ui, win: &HashMap<String, String>) -> egui::Response {
         let wm_class = win.get("class").expect("qtile sends correct format");
-        let lowercase_wm_class = wm_class.clone().to_lowercase();
-        let lowercase_wm_class = lowercase_wm_class.as_str();
-        let path = self.find_icon(lowercase_wm_class);
+        let lowercase_wm_class = wm_class.to_lowercase();
+        let path = self.find_icon(&lowercase_wm_class);
         match path {
             Some(p) => match p.to_str() {
                 Some(p) => self.new_image(ui, p),
@@ -411,19 +426,20 @@ impl AsyncApp {
         text_font_id: &egui::FontId,
         win: &HashMap<String, String>,
     ) -> egui::Response {
-        let mut name = win.get("name").expect("qtile sends correct format").clone();
-        if name.len() > 31 {
-            let upto = name
-                .char_indices()
-                .map(|(i, _)| i)
-                .nth(30)
-                .unwrap_or(name.len());
-            name.truncate(upto);
-        }
+        let name = truncate_window_name(
+            win.get("name").expect("qtile sends correct format"),
+            31,
+        );
         self.new_label(ui, &name, text_font_id)
     }
 
-    pub fn render_ui(&mut self, ctx: &eframe::egui::Context, windows: &[HashMap<String, String>], is_visible: bool, focus_index: usize) {
+    pub fn render_ui(
+        &mut self,
+        ctx: &eframe::egui::Context,
+        windows: &[HashMap<String, String>],
+        is_visible: bool,
+        focus_index: usize,
+    ) {
         ctx.all_styles_mut(|style| {
             style.visuals.panel_fill =
                 Color32::from_hex(self.config.colors.bg_color.as_str()).expect("color from hex");
@@ -444,11 +460,13 @@ impl AsyncApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.style_mut().visuals.widgets.noninteractive.bg_stroke = Stroke {
                 width: 0.0,
-                color: Color32::from_hex(self.config.colors.text_color.as_str()).expect("color from hex"),
+                color: Color32::from_hex(self.config.colors.text_color.as_str())
+                    .expect("color from hex"),
             };
             ui.style_mut().visuals.widgets.noninteractive.fg_stroke = Stroke {
                 width: 0.0,
-                color: Color32::from_hex(self.config.colors.text_color.as_str()).expect("color from hex"),
+                color: Color32::from_hex(self.config.colors.text_color.as_str())
+                    .expect("color from hex"),
             };
             ui.style_mut().interaction.selectable_labels = false;
 
@@ -464,82 +482,127 @@ impl AsyncApp {
                         Color32::TRANSPARENT
                     };
 
-                    let stroke_color = if is_selected || (!is_selected && ui.rect_contains_pointer(ui.available_rect_before_wrap())) {
-                        Color32::from_hex(&self.config.colors.group_hover_color).unwrap_or(Color32::WHITE)
+                    let stroke_color = if is_selected
+                        || ui.rect_contains_pointer(ui.available_rect_before_wrap())
+                    {
+                        Color32::from_hex(&self.config.colors.group_hover_color)
+                            .unwrap_or(Color32::WHITE)
                     } else {
-                        Color32::from_hex(&self.config.colors.normal_group_color).unwrap_or(Color32::GRAY)
+                        Color32::from_hex(&self.config.colors.normal_group_color)
+                            .unwrap_or(Color32::GRAY)
                     };
 
                     let frame = egui::Frame::NONE
                         .inner_margin(egui::Margin::same(12))
                         .corner_radius(12)
-                        .stroke(Stroke::new(self.config.sizes.group_rect_stroke_width, stroke_color))
+                        .stroke(Stroke::new(
+                            self.config.sizes.group_rect_stroke_width,
+                            stroke_color,
+                        ))
                         .fill(bg_color);
 
-                    let response = frame.show(ui, |ui| {
-                        // Apply fixed min width if vertical so cards align perfectly
-                        if self.config.ui.orientation == Orientation::Vertical {
-                            ui.set_min_width(self.config.sizes.window_size.width - 24.0);
-                        } else {
-                            ui.set_min_width(self.config.sizes.window_size.width / 1.5);
-                        }
-
-                        ui.horizontal(|ui| {
-                            // Render Icon first
-                            if self.config.ui.items.contains(&crate::config::UiItem::Icon) {
-                                self.window_icon(ui, win);
-                                ui.add_space(12.0); // generous gap
+                    let response = frame
+                        .show(ui, |ui| {
+                            // Apply fixed min width if vertical so cards align perfectly
+                            if self.config.ui.orientation == Orientation::Vertical {
+                                ui.set_min_width(self.config.sizes.window_size.width - 24.0);
+                            } else {
+                                ui.set_min_width(self.config.sizes.window_size.width / 1.5);
                             }
 
-                            // Render text vertically stacked next to the icon
-                            ui.vertical(|ui| {
-                                ui.spacing_mut().item_spacing.y = 4.0; // tighter text spacing
+                            ui.horizontal(|ui| {
+                                // Render Icon first
+                                if self.config.ui.items.contains(&crate::config::UiItem::Icon) {
+                                    self.window_icon(ui, win);
+                                    ui.add_space(12.0); // generous gap
+                                }
 
-                                for item in &self.config.ui.items {
-                                    match item {
-                                        crate::config::UiItem::Icon => {} // Already handled
-                                        crate::config::UiItem::Name => {
-                                            let mut name = win.get("name").unwrap_or(&String::new()).clone();
-                                            // Truncate to look clean inside cards
-                                            if name.len() > 35 {
-                                                let upto = name.char_indices().nth(35).map(|(i, _)| i).unwrap_or(name.len());
-                                                name.truncate(upto);
-                                                name.push_str("...");
+                                // Render text vertically stacked next to the icon
+                                ui.vertical(|ui| {
+                                    ui.spacing_mut().item_spacing.y = 4.0; // tighter text spacing
+
+                                    for item in &self.config.ui.items {
+                                        match item {
+                                            crate::config::UiItem::Icon => {} // Already handled
+                                            crate::config::UiItem::Name => {
+                                                let mut name = win
+                                                    .get("name")
+                                                    .unwrap_or(&String::new())
+                                                    .clone();
+                                                // Truncate to look clean inside cards
+                                                if name.len() > 35 {
+                                                    let upto = name
+                                                        .char_indices()
+                                                        .nth(35)
+                                                        .map(|(i, _)| i)
+                                                        .unwrap_or(name.len());
+                                                    name.truncate(upto);
+                                                    name.push_str("...");
+                                                }
+                                                let base_color = Color32::from_hex(
+                                                    &self.config.colors.text_color,
+                                                )
+                                                .unwrap_or(Color32::GRAY);
+                                                let color = if is_selected {
+                                                    Color32::from_hex(
+                                                        &self.config.colors.group_hover_color,
+                                                    )
+                                                    .unwrap_or(Color32::WHITE)
+                                                } else {
+                                                    base_color
+                                                };
+                                                ui.label(
+                                                    egui::RichText::new(name)
+                                                        .font(text_font_id.clone())
+                                                        .color(color)
+                                                        .strong(),
+                                                );
                                             }
-                                            let base_color = Color32::from_hex(&self.config.colors.text_color).unwrap_or(Color32::GRAY);
-                                            let color = if is_selected {
-                                                Color32::from_hex(&self.config.colors.group_hover_color).unwrap_or(Color32::WHITE)
-                                            } else {
-                                                base_color
-                                            };
-                                            ui.label(
-                                                egui::RichText::new(name)
-                                                    .font(text_font_id.clone())
-                                                    .color(color)
-                                                    .strong()
-                                            );
-                                        }
-                                        crate::config::UiItem::GroupName => {
-                                            let text = win.get("group_name").cloned().unwrap_or_default();
-                                            ui.label(
-                                                egui::RichText::new(text)
-                                                    .font(egui::FontId::new(text_font_id.size * 0.85, text_font_id.family.clone()))
-                                                    .color(Color32::from_hex(&self.config.colors.text_color).unwrap_or(Color32::GRAY).gamma_multiply(0.7))
-                                            );
-                                        }
-                                        crate::config::UiItem::GroupLabel => {
-                                            let text = win.get("group_label").cloned().unwrap_or_default();
-                                            ui.label(
-                                                egui::RichText::new(text)
-                                                    .font(icon_font_id.clone())
-                                                    .color(Color32::from_hex(&self.config.colors.text_color).unwrap_or(Color32::GRAY).gamma_multiply(0.7))
-                                            );
+                                            crate::config::UiItem::GroupName => {
+                                                let text = win
+                                                    .get("group_name")
+                                                    .cloned()
+                                                    .unwrap_or_default();
+                                                ui.label(
+                                                    egui::RichText::new(text)
+                                                        .font(egui::FontId::new(
+                                                            text_font_id.size * 0.85,
+                                                            text_font_id.family.clone(),
+                                                        ))
+                                                        .color(
+                                                            Color32::from_hex(
+                                                                &self.config.colors.text_color,
+                                                            )
+                                                            .unwrap_or(Color32::GRAY)
+                                                            .gamma_multiply(0.7),
+                                                        ),
+                                                );
+                                            }
+                                            crate::config::UiItem::GroupLabel => {
+                                                let text = win
+                                                    .get("group_label")
+                                                    .cloned()
+                                                    .unwrap_or_default();
+                                                ui.label(
+                                                    egui::RichText::new(text)
+                                                        .font(icon_font_id.clone())
+                                                        .color(
+                                                            Color32::from_hex(
+                                                                &self.config.colors.text_color,
+                                                            )
+                                                            .unwrap_or(Color32::GRAY)
+                                                            .gamma_multiply(0.7),
+                                                        ),
+                                                );
+                                            }
                                         }
                                     }
-                                }
+                                });
                             });
-                        });
-                    }).response.interact(egui::Sense::click()).on_hover_cursor(egui::CursorIcon::Crosshair);
+                        })
+                        .response
+                        .interact(egui::Sense::click())
+                        .on_hover_cursor(egui::CursorIcon::Crosshair);
 
                     if response.middle_clicked() {
                         self.close_window(win);
@@ -581,21 +644,24 @@ impl AsyncApp {
         });
 
         // Compute outer window bounds including margins
-        let padding_x = ctx.style().spacing.window_margin.left as f32 + ctx.style().spacing.window_margin.right as f32;
-        let padding_y = ctx.style().spacing.window_margin.top as f32 + ctx.style().spacing.window_margin.bottom as f32;
-        
+        let padding_x = ctx.style().spacing.window_margin.left as f32
+            + ctx.style().spacing.window_margin.right as f32;
+        let padding_y = ctx.style().spacing.window_margin.top as f32
+            + ctx.style().spacing.window_margin.bottom as f32;
+
         let width = (final_width + padding_x + self.config.sizes.group_rect_stroke_width * 2.0)
             .max(self.config.sizes.window_size.width) // Ensure we at least hit the configured width
             .min(1200.0) as i32; // But don't grow infinitely horizontally
-            
+
         let height = (final_height + padding_y + self.config.sizes.group_rect_stroke_width * 2.0)
             .min(self.config.sizes.window_size.height) as i32;
 
         // Only resize/reposition when visible
         if is_visible {
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-                egui::vec2(width as f32, height as f32),
-            ));
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
+                width as f32,
+                height as f32,
+            )));
             self.resize_and_center(width, height);
         }
     }
@@ -669,7 +735,11 @@ impl eframe::App for AsyncApp {
         let focus_index = state.focus_index;
         drop(state);
 
-        log::debug!("update() | visible={} history={}", is_visible, history.is_some());
+        log::debug!(
+            "update() | visible={} history={}",
+            is_visible,
+            history.is_some()
+        );
         // Always render if we have history — keeps the buffer populated so
         // the window has content ready when place() makes it visible.
         if let Some(history) = history {
@@ -712,5 +782,100 @@ pub fn run_ui() -> anyhow::Result<()> {
     ) {
         Ok(()) => Ok(()),
         Err(e) => bail!("eframe crashed: {}", e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Font;
+
+    #[test]
+    fn truncate_short_name_unchanged() {
+        assert_eq!(truncate_window_name("hello", 31), "hello");
+    }
+
+    #[test]
+    fn truncate_at_exact_limit_unchanged() {
+        let name = "a".repeat(31);
+        assert_eq!(truncate_window_name(&name, 31), name);
+    }
+
+    #[test]
+    fn truncate_over_limit() {
+        let name = "a".repeat(40);
+        let result = truncate_window_name(&name, 31);
+        assert_eq!(result.chars().count(), 31);
+        assert_eq!(result, "a".repeat(31));
+    }
+
+    #[test]
+    fn truncate_multibyte_unicode() {
+        // Each emoji is multiple bytes; truncating must respect char boundaries.
+        let name = "😀".repeat(40);
+        let result = truncate_window_name(&name, 10);
+        assert_eq!(result.chars().count(), 10);
+        assert_eq!(result, "😀".repeat(10));
+    }
+
+    #[test]
+    fn truncate_zero_max() {
+        assert_eq!(truncate_window_name("anything", 0), "");
+    }
+
+    #[test]
+    fn add_font_family_inserts_key() {
+        let mut fonts = FontDefinitions::default();
+        AsyncApp::add_font_family(&mut fonts, "my-family");
+        assert!(
+            fonts
+                .families
+                .contains_key(&FontFamily::Name("my-family".into()))
+        );
+    }
+
+    #[test]
+    fn add_font_nonexistent_path_does_not_panic() {
+        let mut fonts = FontDefinitions::default();
+        AsyncApp::add_font_family(&mut fonts, "fam");
+        let font = Font {
+            name: "ghost".to_string(),
+            path: "/nonexistent/path/to/font.ttf".to_string(),
+        };
+        AsyncApp::add_font(&mut fonts, "fam", &font);
+        // Font data should NOT have been inserted.
+        assert!(!fonts.font_data.contains_key("ghost"));
+    }
+
+    #[test]
+    fn add_font_existing_path_inserts_data() {
+        let path = "/etc/hostname";
+        if !std::path::Path::new(path).exists() {
+            return; // skip if unavailable
+        }
+        let mut fonts = FontDefinitions::default();
+        AsyncApp::add_font_family(&mut fonts, "fam");
+        let font = Font {
+            name: "fake-font".to_string(),
+            path: path.to_string(),
+        };
+        AsyncApp::add_font(&mut fonts, "fam", &font);
+        assert!(fonts.font_data.contains_key("fake-font"));
+        assert!(
+            fonts
+                .families
+                .get(&FontFamily::Name("fam".into()))
+                .unwrap()
+                .contains(&"fake-font".to_string())
+        );
+    }
+
+    #[test]
+    fn shared_state_default() {
+        let s = SharedState::default();
+        assert!(!s.is_visible);
+        assert!(s.cached_wid.is_none());
+        assert_eq!(s.focus_index, 0);
+        assert!(s.current_focus_history.is_none());
     }
 }
