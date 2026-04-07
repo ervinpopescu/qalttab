@@ -11,7 +11,7 @@ async fn main() -> anyhow::Result<()> {
         .env()
         .init()?;
     let _args: Args = Args::parse();
-    
+
     // Unset DISPLAY to prevent arboard (used by eframe) from hanging on Xwayland connections
     unsafe {
         std::env::remove_var("DISPLAY");
