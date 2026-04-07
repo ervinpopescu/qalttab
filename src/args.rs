@@ -1,7 +1,7 @@
 use clap::Parser;
 
 /// Qtile alttab window
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Debug, Clone, Default)]
 #[command(version, about, long_about = None)]
 pub struct Args {}
 

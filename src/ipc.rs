@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::mpsc::UnboundedSender;
@@ -7,6 +10,21 @@ use anyhow::Context;
 use serde_json::{Value, json};
 
 use crate::ui::{AppEvent, MessageType, Response};
+
+/// Returns the socket path to use.
+/// If `custom` is `Some`, returns it unchanged (used in tests).
+/// Otherwise derives the default from `$XDG_CACHE_HOME` and `$WAYLAND_DISPLAY`.
+pub fn get_socket_path(custom: Option<&Path>) -> PathBuf {
+    if let Some(p) = custom {
+        return p.to_owned();
+    }
+    let wayland_display = std::env::var("WAYLAND_DISPLAY").unwrap_or("wayland-0".to_owned());
+    let cache_home = std::env::var("XDG_CACHE_HOME").unwrap_or("~/.cache".to_owned());
+    let expanded = shellexpand::tilde(&cache_home).into_owned();
+    Path::new(&expanded)
+        .join("qtile")
+        .join(format!("qalttab.{wayland_display}"))
+}
 
 type ParsedMessage = (MessageType, Vec<HashMap<String, String>>, Option<usize>);
 
@@ -55,20 +73,19 @@ pub fn parse_ipc_message(data: &[u8]) -> anyhow::Result<ParsedMessage> {
     Ok((message_type, windows, focus_index))
 }
 
-pub async fn listen(tx: UnboundedSender<AppEvent>, ctx: egui::Context) -> anyhow::Result<()> {
-    let wayland_display = std::env::var("WAYLAND_DISPLAY").unwrap_or("wayland-0".to_owned());
-    let cache_home = std::env::var("XDG_CACHE_HOME").unwrap_or("~/.cache".to_owned());
-    let expanded_cache_home = shellexpand::tilde(&cache_home).into_owned();
-    let socket_path: &Path = &Path::new(&expanded_cache_home)
-        .join("qtile")
-        .join(format!("qalttab.{wayland_display}"));
+pub async fn listen(
+    tx: UnboundedSender<AppEvent>,
+    ctx: egui::Context,
+    custom_socket_path: Option<&Path>,
+) -> anyhow::Result<()> {
+    let socket_path = get_socket_path(custom_socket_path);
 
-    if let Err(e) = std::fs::remove_file(socket_path)
+    if let Err(e) = std::fs::remove_file(&socket_path)
         && e.kind() != std::io::ErrorKind::NotFound
     {
         return Err(e.into());
     }
-    let listener = UnixListener::bind(socket_path)?;
+    let listener = UnixListener::bind(&socket_path)?;
     log::info!(r#"Server listening on {socket_path:?}"#);
 
     // Accept incoming connections in a loop
