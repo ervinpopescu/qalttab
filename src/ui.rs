@@ -11,10 +11,51 @@ use egui::{
     Vec2,
 };
 use freedesktop_icons::lookup;
-use qtile_client_lib::utils::client::InteractiveCommandClient;
+use qtile_client_lib::utils::client::{CommandQuery, QtileClient};
 use serde_json::Value;
 use sysinfo::{Pid, System};
 use tokio::sync::mpsc::unbounded_channel;
+
+/// Abstraction over the Qtile IPC client.
+///
+/// The current impl (`IccQtileClient`) wraps the synchronous `QtileClient`
+/// from the framing-support API and is intended to be called from inside
+/// `tokio::task::spawn_blocking`.
+///
+/// TODO(#186): once the framing protocol is stable, make this trait async
+/// and remove the `spawn_blocking` wrappers.
+pub trait QtileClientTrait: Send + Sync {
+    fn call(
+        &self,
+        object: Option<Vec<String>>,
+        function: Option<String>,
+        args: Option<Vec<String>>,
+    ) -> anyhow::Result<serde_json::Value>;
+}
+
+/// Production implementation using `QtileClient` from the framing-support API.
+pub struct IccQtileClient;
+
+impl QtileClientTrait for IccQtileClient {
+    fn call(
+        &self,
+        object: Option<Vec<String>>,
+        function: Option<String>,
+        args: Option<Vec<String>>,
+    ) -> anyhow::Result<serde_json::Value> {
+        let mut query = CommandQuery::new();
+        if let Some(obj) = object {
+            query = query.object(obj);
+        }
+        if let Some(func) = function {
+            query = query.function(func);
+        }
+        if let Some(a) = args {
+            query = query.args(a);
+        }
+        QtileClient::new(false).call(query).map(|r| r.to_json())
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Response {
@@ -45,6 +86,7 @@ pub struct SharedState {
 pub struct AsyncApp {
     shared: Arc<Mutex<SharedState>>,
     config: Config,
+    qtile: Arc<dyn QtileClientTrait>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -95,6 +137,13 @@ impl AsyncApp {
             .extend([(FontFamily::Name(font_family_name.into()), Vec::new())]);
     }
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        Self::new_with_client(cc, Arc::new(IccQtileClient))
+    }
+
+    pub fn new_with_client(
+        cc: &eframe::CreationContext<'_>,
+        qtile: Arc<dyn QtileClientTrait>,
+    ) -> Self {
         let (tx, mut rx) = unbounded_channel::<AppEvent>();
         let shared = Arc::new(Mutex::new(SharedState::default()));
 
@@ -102,7 +151,7 @@ impl AsyncApp {
         let tx_socket = tx.clone();
         let ctx_socket = cc.egui_ctx.clone();
         tokio::spawn(async move {
-            if let Err(e) = crate::ipc::listen(tx_socket, ctx_socket).await {
+            if let Err(e) = crate::ipc::listen(tx_socket, ctx_socket, None).await {
                 log::error!("Unix socket listener error: {e:?}");
             }
         });
@@ -116,6 +165,7 @@ impl AsyncApp {
         });
 
         // Background event processor — runs independently of egui's render loop
+        let qtile_bg = Arc::clone(&qtile);
         let shared_clone = shared.clone();
         let ctx_events = cc.egui_ctx.clone();
         tokio::spawn(async move {
@@ -131,8 +181,9 @@ impl AsyncApp {
             // First, discover our WID
             log::debug!("Starting background WID discovery...");
             loop {
+                let qtile_c = Arc::clone(&qtile_bg);
                 let res = tokio::task::spawn_blocking(move || {
-                    InteractiveCommandClient::call(
+                    qtile_c.call(
                         Some(vec![]),
                         Some("eval".into()),
                         Some(vec![
@@ -148,7 +199,6 @@ impl AsyncApp {
                     )"#
                             .into(),
                         ]),
-                        false,
                     )
                 })
                 .await;
@@ -172,12 +222,12 @@ impl AsyncApp {
                         shared_clone.lock().unwrap().cached_wid = Some(wid.clone());
                         // Hide off-screen initially
                         let wid_c = wid.clone();
+                        let qtile_c = Arc::clone(&qtile_bg);
                         tokio::task::spawn_blocking(move || {
-                            let _ = InteractiveCommandClient::call(
+                            let _ = qtile_c.call(
                                 Some(vec![]),
                                 Some("eval".into()),
                                 Some(vec![format!("self.windows_map[{wid_c}].hide()")]),
-                                false,
                             );
                         });
                         break;
@@ -200,16 +250,17 @@ impl AsyncApp {
                             }
                             let shared_hide = shared_clone.clone();
                             let wid_hide = cached_wid.clone();
+                            let qtile_hide = Arc::clone(&qtile_bg);
                             pending_hide = Some(tokio::spawn(async move {
                                 tokio::time::sleep(std::time::Duration::from_millis(150)).await;
                                 log::debug!("Delayed hide executing");
                                 if let Some(wid) = wid_hide {
+                                    let qtile_c = Arc::clone(&qtile_hide);
                                     tokio::task::spawn_blocking(move || {
-                                        let _ = InteractiveCommandClient::call(
+                                        let _ = qtile_c.call(
                                             Some(vec![]),
                                             Some("eval".into()),
                                             Some(vec![format!("self.windows_map[{wid}].hide()")]),
-                                            false,
                                         );
                                     })
                                     .await
@@ -221,12 +272,12 @@ impl AsyncApp {
                                     state.current_focus_history = None;
                                     state.last_placed_height = 0.0;
                                 }
-                                tokio::task::spawn_blocking(|| {
-                                    let _ = InteractiveCommandClient::call(
+                                let qtile_c = Arc::clone(&qtile_hide);
+                                tokio::task::spawn_blocking(move || {
+                                    let _ = qtile_c.call(
                                         Some(vec![]),
                                         Some("fire_user_hook".into()),
                                         Some(vec!["alt_release".to_owned()]),
-                                        false,
                                     );
                                 })
                                 .await
@@ -269,8 +320,9 @@ impl AsyncApp {
                                     (w, h)
                                 };
                                 if let Some(wid) = cached_wid.clone() {
+                                    let qtile_c = Arc::clone(&qtile_bg);
                                     tokio::task::spawn_blocking(move || {
-                                        let _ = InteractiveCommandClient::call(
+                                        let _ = qtile_c.call(
                                             Some(vec![]),
                                             Some("eval".into()),
                                             Some(vec![format!(
@@ -283,7 +335,6 @@ impl AsyncApp {
                                                  w.keep_above(); \
                                                  w.bring_to_front()"
                                             )]),
-                                            false,
                                         );
                                     });
                                 }
@@ -302,14 +353,14 @@ impl AsyncApp {
                                     state.last_placed_height = 0.0;
                                     if let Some(wid) = state.cached_wid.clone() {
                                         drop(state);
+                                        let qtile_c = Arc::clone(&qtile_bg);
                                         tokio::task::spawn_blocking(move || {
-                                            let _ = InteractiveCommandClient::call(
+                                            let _ = qtile_c.call(
                                                 Some(vec![]),
                                                 Some("eval".into()),
                                                 Some(vec![format!(
                                                     "self.windows_map[{wid}].hide()"
                                                 )]),
-                                                false,
                                             );
                                         });
                                     }
@@ -372,7 +423,11 @@ impl AsyncApp {
         };
         cc.egui_ctx.set_fonts(fonts);
         egui_extras::install_image_loaders(&cc.egui_ctx);
-        Self { shared, config }
+        Self {
+            shared,
+            config,
+            qtile,
+        }
     }
 
     pub fn find_icon(&self, wm_class: &str) -> Option<PathBuf> {
@@ -426,10 +481,7 @@ impl AsyncApp {
         text_font_id: &egui::FontId,
         win: &HashMap<String, String>,
     ) -> egui::Response {
-        let name = truncate_window_name(
-            win.get("name").expect("qtile sends correct format"),
-            31,
-        );
+        let name = truncate_window_name(win.get("name").expect("qtile sends correct format"), 31);
         self.new_label(ui, &name, text_font_id)
     }
 
@@ -613,12 +665,12 @@ impl AsyncApp {
                         let shared = self.shared.clone();
                         let mut state = shared.lock().unwrap();
                         if let Some(wid) = state.cached_wid.clone() {
+                            let qtile_c = Arc::clone(&self.qtile);
                             tokio::task::spawn_blocking(move || {
-                                let _ = InteractiveCommandClient::call(
+                                let _ = qtile_c.call(
                                     Some(vec![]),
                                     Some("eval".into()),
                                     Some(vec![format!("self.windows_map[{wid}].hide()")]),
-                                    false,
                                 );
                             });
                         }
@@ -671,16 +723,15 @@ impl AsyncApp {
             .get("id")
             .unwrap_or_else(|| panic!("qtile sends correct format {:?}", win.get("id")))
             .to_string();
-
+        let qtile = Arc::clone(&self.qtile);
         tokio::task::spawn_blocking(move || {
-            let _ = InteractiveCommandClient::call(
+            let _ = qtile.call(
                 Some(vec![]),
                 Some("eval".into()),
                 Some(vec![format!(
                     "self.windows_map[{}].focus(); self.windows_map[{}].bring_to_front()",
                     wid, wid
                 )]),
-                false,
             );
         });
     }
@@ -693,8 +744,9 @@ impl AsyncApp {
 
         if let Some(wid) = state.cached_wid.clone() {
             log::debug!("Resizing window ({wid}) to {width}x{height}");
+            let qtile = Arc::clone(&self.qtile);
             tokio::task::spawn_blocking(move || {
-                let _ = InteractiveCommandClient::call(
+                let _ = qtile.call(
                     Some(vec![]),
                     Some("eval".into()),
                     Some(vec![format!(
@@ -705,7 +757,6 @@ impl AsyncApp {
                          self.windows_map[{wid}].keep_above(); \
                          self.windows_map[{wid}].bring_to_front()"
                     )]),
-                    false,
                 );
             });
             state.last_placed_height = height as f32;
@@ -716,12 +767,12 @@ impl AsyncApp {
 
     fn close_window(&self, win: &HashMap<String, String>) {
         let wid = win.get("id").expect("qtile sends correct format").clone();
+        let qtile = Arc::clone(&self.qtile);
         tokio::task::spawn_blocking(move || {
-            let _response = InteractiveCommandClient::call(
+            let _ = qtile.call(
                 Some(vec!["window".to_owned(), wid]),
                 Some("kill".into()),
                 Some(vec![]),
-                false,
             );
         });
     }
