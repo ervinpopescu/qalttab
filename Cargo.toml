@@ -9,14 +9,16 @@ clap = { version = "4.6", features = ["derive", "string"] }
 confy = { version = "2", default-features = false, features = ["yaml_conf"] }
 egui = { version = "0.33.3", features = ["callstack"] }
 egui_extras = { version = "0.33.3", features = ["all_loaders"] }
-eframe = { version = "0.33.3", features = [
+eframe = { version = "0.33.3", default-features = false, features = [
   "default_fonts", # Embed the default egui fonts.
   "persistence",   # Enable restoring app state when restarting the app.
+  "wayland",       # Wayland support (Linux only).
+  "glow",          # OpenGL renderer.
 ] }
 freedesktop-icons = { version = "0.4" }
 indexmap = { version = "2.14", features = ["serde"] }
 log = { version = "0.4" }
-qtile-cmd-client = { git = "https://github.com/ervinpopescu/qtile-cmd-client", branch = "feature/framing-support", default-features = false }
+qtile-cmd-client = { git = "https://github.com/ervinpopescu/qtile-cmd-client" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 simple_logger = { version = "5" }
