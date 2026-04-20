@@ -11,7 +11,7 @@ use egui::{
     Vec2,
 };
 use freedesktop_icons::lookup;
-use qtile_client_lib::utils::client::{CommandQuery, QtileClient};
+use qtile_client_lib::utils::client::{CallResult, InteractiveCommandClient};
 use serde_json::Value;
 use sysinfo::{Pid, System};
 use tokio::sync::mpsc::unbounded_channel;
@@ -33,7 +33,7 @@ pub trait QtileClientTrait: Send + Sync {
     ) -> anyhow::Result<serde_json::Value>;
 }
 
-/// Production implementation using `QtileClient` from the framing-support API.
+/// Production implementation using `InteractiveCommandClient` from qtile-cmd-client main.
 pub struct IccQtileClient;
 
 impl QtileClientTrait for IccQtileClient {
@@ -43,17 +43,10 @@ impl QtileClientTrait for IccQtileClient {
         function: Option<String>,
         args: Option<Vec<String>>,
     ) -> anyhow::Result<serde_json::Value> {
-        let mut query = CommandQuery::new();
-        if let Some(obj) = object {
-            query = query.object(obj);
+        match InteractiveCommandClient::call(object, function, args, false)? {
+            CallResult::Value(v) => Ok(v),
+            CallResult::Text(t) => Ok(serde_json::Value::String(t)),
         }
-        if let Some(func) = function {
-            query = query.function(func);
-        }
-        if let Some(a) = args {
-            query = query.args(a);
-        }
-        QtileClient::new(false).call(query).map(|r| r.to_json())
     }
 }
 
