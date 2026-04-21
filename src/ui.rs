@@ -480,6 +480,7 @@ impl AsyncApp {
 
     pub fn render_ui(
         &mut self,
+        ui: &mut egui::Ui,
         ctx: &eframe::egui::Context,
         windows: &[HashMap<String, String>],
         is_visible: bool,
@@ -502,7 +503,7 @@ impl AsyncApp {
         let mut final_width = 0.0;
         let mut final_height = 0.0;
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.style_mut().visuals.widgets.noninteractive.bg_stroke = Stroke {
                 width: 0.0,
                 color: Color32::from_hex(self.config.colors.text_color.as_str())
@@ -689,10 +690,10 @@ impl AsyncApp {
         });
 
         // Compute outer window bounds including margins
-        let padding_x = ctx.style().spacing.window_margin.left as f32
-            + ctx.style().spacing.window_margin.right as f32;
-        let padding_y = ctx.style().spacing.window_margin.top as f32
-            + ctx.style().spacing.window_margin.bottom as f32;
+        let padding_x = ctx.global_style().spacing.window_margin.left as f32
+            + ctx.global_style().spacing.window_margin.right as f32;
+        let padding_y = ctx.global_style().spacing.window_margin.top as f32
+            + ctx.global_style().spacing.window_margin.bottom as f32;
 
         let width = (final_width + padding_x + self.config.sizes.group_rect_stroke_width * 2.0)
             .max(self.config.sizes.window_size.width) // Ensure we at least hit the configured width
@@ -772,7 +773,7 @@ impl AsyncApp {
 }
 
 impl eframe::App for AsyncApp {
-    fn update(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let state = self.shared.lock().unwrap();
         let is_visible = state.is_visible;
         let history = state.current_focus_history.clone();
@@ -780,17 +781,23 @@ impl eframe::App for AsyncApp {
         drop(state);
 
         log::debug!(
-            "update() | visible={} history={}",
+            "ui() | visible={} history={}",
             is_visible,
             history.is_some()
         );
         // Always render if we have history — keeps the buffer populated so
         // the window has content ready when place() makes it visible.
         if let Some(history) = history {
-            self.render_ui(ctx, &history.windows, is_visible, focus_index);
+            self.render_ui(
+                ui,
+                &ui.ctx().clone(),
+                &history.windows,
+                is_visible,
+                focus_index,
+            );
         }
         if is_visible {
-            ctx.request_repaint();
+            ui.ctx().request_repaint();
         }
     }
 }
