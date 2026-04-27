@@ -1041,4 +1041,87 @@ mod tests {
         assert_eq!(result.chars().count(), 3);
         assert_eq!(result, "ab😀");
     }
+
+    // ── IccQtileClient::call coverage ─────────────────────────────────────────
+    // Serialize env-var mutations so parallel tests don't interfere.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn restore_env(orig_cache: Option<String>, orig_display: Option<String>) {
+        // SAFETY: ENV_LOCK is held by every caller, serialising all env mutations.
+        unsafe {
+            match orig_cache {
+                Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
+                None => std::env::remove_var("XDG_CACHE_HOME"),
+            }
+            match orig_display {
+                Some(v) => std::env::set_var("WAYLAND_DISPLAY", v),
+                None => std::env::remove_var("WAYLAND_DISPLAY"),
+            }
+        }
+    }
+
+    /// All-`Some` arms + success path: spins up a mock Qtile socket that returns
+    /// a legacy `[0, null]` response, exercising every new line in
+    /// `IccQtileClient::call` including the `.map(|r| r.to_json())` closure.
+    #[test]
+    fn icc_qtile_client_call_all_some_branches_via_mock_socket() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixListener;
+
+        const SOCKET_DIR: &str = "/tmp/qalttab_icc_mock_test";
+        const DISPLAY: &str = "wayland-qalttab-mock";
+        let socket_path = format!("{SOCKET_DIR}/qtile/qtilesocket.{DISPLAY}");
+
+        std::fs::create_dir_all(format!("{SOCKET_DIR}/qtile")).unwrap();
+        let _ = std::fs::remove_file(&socket_path);
+
+        let listener = UnixListener::bind(&socket_path).unwrap();
+        let server = std::thread::spawn(move || {
+            if let Ok((mut conn, _)) = listener.accept() {
+                let mut buf = String::new();
+                let _ = conn.read_to_string(&mut buf);
+                // Minimal valid Qtile legacy response: [status, result]
+                let _ = conn.write_all(b"[0, null]");
+            }
+        });
+
+        let _guard = ENV_LOCK.lock().unwrap();
+        let orig_cache = std::env::var("XDG_CACHE_HOME").ok();
+        let orig_display = std::env::var("WAYLAND_DISPLAY").ok();
+        // SAFETY: ENV_LOCK serialises all env mutations in this test module.
+        unsafe {
+            std::env::set_var("XDG_CACHE_HOME", SOCKET_DIR);
+            std::env::set_var("WAYLAND_DISPLAY", DISPLAY);
+        }
+
+        let result = IccQtileClient.call(
+            Some(vec![]),
+            Some("eval".to_string()),
+            Some(vec!["1+1".to_string()]),
+        );
+
+        restore_env(orig_cache, orig_display);
+        let _ = server.join();
+
+        assert_eq!(result.unwrap(), serde_json::Value::Null);
+    }
+
+    /// `None` arms for `object` and `args`: verifies those branches are skipped,
+    /// and that the function returns `Err` when no socket exists at the path.
+    #[test]
+    fn icc_qtile_client_call_none_object_and_args_returns_err() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let orig_cache = std::env::var("XDG_CACHE_HOME").ok();
+        let orig_display = std::env::var("WAYLAND_DISPLAY").ok();
+        // SAFETY: ENV_LOCK serialises all env mutations in this test module.
+        unsafe {
+            std::env::set_var("XDG_CACHE_HOME", "/tmp/qalttab_no_qtile_socket_xyz");
+            std::env::set_var("WAYLAND_DISPLAY", "wayland-qalttab-no-socket");
+        }
+
+        let result = IccQtileClient.call(None, Some("eval".to_string()), None);
+
+        restore_env(orig_cache, orig_display);
+        assert!(result.is_err());
+    }
 }
