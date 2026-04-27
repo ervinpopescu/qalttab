@@ -323,4 +323,24 @@ mod tests {
         let e = err(r#"[1,2,3]"#);
         assert!(e.contains("message_type"), "got: {e}");
     }
+
+    #[test]
+    fn get_socket_path_custom_path_returned_unchanged() {
+        let p = Path::new("/tmp/qalttab_unit_test.sock");
+        assert_eq!(
+            get_socket_path(Some(p)),
+            PathBuf::from("/tmp/qalttab_unit_test.sock")
+        );
+    }
+
+    #[test]
+    fn get_socket_path_default_contains_expected_segments() {
+        let path = get_socket_path(None);
+        let s = path.to_str().unwrap();
+        assert!(s.contains("qtile"), "expected 'qtile' in default path: {s}");
+        assert!(
+            s.contains("qalttab."),
+            "expected 'qalttab.' in default path: {s}"
+        );
+    }
 }

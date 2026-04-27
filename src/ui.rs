@@ -936,4 +936,109 @@ mod tests {
         assert_eq!(s.focus_index, 0);
         assert!(s.current_focus_history.is_none());
     }
+
+    #[test]
+    fn shared_state_fields_can_be_mutated() {
+        let s = SharedState {
+            is_visible: true,
+            focus_index: 5,
+            last_width: 300,
+            last_height: 400,
+            last_placed_height: 400.0,
+            cached_wid: Some("42".to_string()),
+            ..SharedState::default()
+        };
+        assert!(s.is_visible);
+        assert_eq!(s.focus_index, 5);
+        assert_eq!(s.last_width, 300);
+        assert_eq!(s.last_height, 400);
+        assert!((s.last_placed_height - 400.0).abs() < f32::EPSILON);
+        assert_eq!(s.cached_wid, Some("42".to_string()));
+    }
+
+    #[test]
+    fn message_type_none_is_distinct_from_other_variants() {
+        assert_ne!(MessageType::None, MessageType::ClientFocus);
+        assert_ne!(MessageType::None, MessageType::CycleWindows);
+    }
+
+    #[test]
+    fn message_type_clone_preserves_variant() {
+        assert_eq!(MessageType::None.clone(), MessageType::None);
+        assert_eq!(MessageType::ClientFocus.clone(), MessageType::ClientFocus);
+        assert_eq!(MessageType::CycleWindows.clone(), MessageType::CycleWindows);
+    }
+
+    #[test]
+    fn response_clone_equals_original() {
+        let r = Response {
+            message_type: MessageType::CycleWindows,
+            windows: vec![],
+            focus_index: Some(2),
+        };
+        assert_eq!(r.clone(), r);
+    }
+
+    #[test]
+    fn response_with_windows_clone_equals_original() {
+        let mut win = std::collections::HashMap::new();
+        win.insert("id".to_string(), "7".to_string());
+        win.insert("name".to_string(), "Term".to_string());
+        let r = Response {
+            message_type: MessageType::ClientFocus,
+            windows: vec![win],
+            focus_index: None,
+        };
+        assert_eq!(r.clone(), r);
+    }
+
+    #[test]
+    fn app_event_alt_released_debug_contains_variant_name() {
+        let s = format!("{:?}", AppEvent::AltReleased);
+        assert!(s.contains("AltReleased"), "got: {s}");
+    }
+
+    #[test]
+    fn app_event_our_window_id_carries_payload() {
+        let e = AppEvent::OurWindowId("wid_99".to_string());
+        if let AppEvent::OurWindowId(id) = e {
+            assert_eq!(id, "wid_99");
+        } else {
+            panic!("unexpected variant");
+        }
+    }
+
+    #[test]
+    fn app_event_unix_socket_msg_carries_response() {
+        let r = Response {
+            message_type: MessageType::CycleWindows,
+            windows: vec![],
+            focus_index: Some(0),
+        };
+        let e = AppEvent::UnixSocketMsg(r.clone());
+        if let AppEvent::UnixSocketMsg(inner) = e {
+            assert_eq!(inner, r);
+        } else {
+            panic!("unexpected variant");
+        }
+    }
+
+    #[test]
+    fn truncate_empty_string_unchanged() {
+        assert_eq!(truncate_window_name("", 31), "");
+    }
+
+    #[test]
+    fn truncate_single_char_limit() {
+        assert_eq!(truncate_window_name("hello", 1), "h");
+    }
+
+    #[test]
+    fn truncate_mixed_ascii_and_unicode() {
+        let name = "ab😀cd";
+        // 5 chars total: a, b, 😀, c, d — truncating to 3 keeps "ab😀"
+        let result = truncate_window_name(name, 3);
+        assert_eq!(result.chars().count(), 3);
+        assert_eq!(result, "ab😀");
+    }
 }
