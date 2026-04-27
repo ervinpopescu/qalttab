@@ -68,4 +68,26 @@ mod tests {
     fn empty_line_is_not_an_alt_release() {
         assert!(!is_alt_release_event(""));
     }
+
+    #[test]
+    fn right_alt_pressed_is_not_an_alt_release() {
+        assert!(!is_alt_release_event(
+            "event5  KEYBOARD_KEY  +0.001s  KEY_RIGHTALT (100) pressed"
+        ));
+    }
+
+    #[test]
+    fn released_keyword_alone_without_alt_is_not_detected() {
+        assert!(!is_alt_release_event("released"));
+    }
+
+    #[test]
+    fn alt_keyword_alone_without_released_is_not_detected() {
+        assert!(!is_alt_release_event("KEY_LEFTALT"));
+    }
+
+    #[test]
+    fn both_alt_keys_mentioned_with_released_detects_either() {
+        assert!(is_alt_release_event("KEY_LEFTALT KEY_RIGHTALT released"));
+    }
 }
