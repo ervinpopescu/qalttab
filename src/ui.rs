@@ -503,7 +503,7 @@ impl AsyncApp {
         let mut final_width = 0.0;
         let mut final_height = 0.0;
 
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.style_mut().visuals.widgets.noninteractive.bg_stroke = Stroke {
                 width: 0.0,
                 color: Color32::from_hex(self.config.colors.text_color.as_str())
