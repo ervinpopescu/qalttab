@@ -10,3 +10,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "saturday"
+    groups:
+      egui:
+        patterns:
+          - "egui*"
+          - "eframe*"
