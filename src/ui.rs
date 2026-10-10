@@ -11,7 +11,7 @@ use egui::{
     Vec2,
 };
 use freedesktop_icons::lookup;
-use qtile_client_lib::utils::client::{CallResult, InteractiveCommandClient};
+use qtile_client_lib::utils::client::{CommandQuery, QtileClient};
 use serde_json::Value;
 use sysinfo::{Pid, System};
 use tokio::sync::mpsc::unbounded_channel;
@@ -33,7 +33,7 @@ pub trait QtileClientTrait: Send + Sync {
     ) -> anyhow::Result<serde_json::Value>;
 }
 
-/// Production implementation using `InteractiveCommandClient` from qtile-cmd-client main.
+/// Production implementation using `QtileClient` + `CommandQuery` from the json-ipc API.
 pub struct IccQtileClient;
 
 impl QtileClientTrait for IccQtileClient {
@@ -43,10 +43,17 @@ impl QtileClientTrait for IccQtileClient {
         function: Option<String>,
         args: Option<Vec<String>>,
     ) -> anyhow::Result<serde_json::Value> {
-        match InteractiveCommandClient::call(object, function, args, false)? {
-            CallResult::Value(v) => Ok(v),
-            CallResult::Text(t) => Ok(serde_json::Value::String(t)),
+        let mut query = CommandQuery::new();
+        if let Some(obj) = object {
+            query = query.object(obj);
         }
+        if let Some(func) = function {
+            query = query.function(func);
+        }
+        if let Some(a) = args {
+            query = query.args(a);
+        }
+        QtileClient::new(false).call(query).map(|r| r.to_json())
     }
 }
 
@@ -928,5 +935,193 @@ mod tests {
         assert!(s.cached_wid.is_none());
         assert_eq!(s.focus_index, 0);
         assert!(s.current_focus_history.is_none());
+    }
+
+    #[test]
+    fn shared_state_fields_can_be_mutated() {
+        let s = SharedState {
+            is_visible: true,
+            focus_index: 5,
+            last_width: 300,
+            last_height: 400,
+            last_placed_height: 400.0,
+            cached_wid: Some("42".to_string()),
+            ..SharedState::default()
+        };
+        assert!(s.is_visible);
+        assert_eq!(s.focus_index, 5);
+        assert_eq!(s.last_width, 300);
+        assert_eq!(s.last_height, 400);
+        assert!((s.last_placed_height - 400.0).abs() < f32::EPSILON);
+        assert_eq!(s.cached_wid, Some("42".to_string()));
+    }
+
+    #[test]
+    fn message_type_none_is_distinct_from_other_variants() {
+        assert_ne!(MessageType::None, MessageType::ClientFocus);
+        assert_ne!(MessageType::None, MessageType::CycleWindows);
+    }
+
+    #[test]
+    fn message_type_clone_preserves_variant() {
+        assert_eq!(MessageType::None.clone(), MessageType::None);
+        assert_eq!(MessageType::ClientFocus.clone(), MessageType::ClientFocus);
+        assert_eq!(MessageType::CycleWindows.clone(), MessageType::CycleWindows);
+    }
+
+    #[test]
+    fn response_clone_equals_original() {
+        let r = Response {
+            message_type: MessageType::CycleWindows,
+            windows: vec![],
+            focus_index: Some(2),
+        };
+        assert_eq!(r.clone(), r);
+    }
+
+    #[test]
+    fn response_with_windows_clone_equals_original() {
+        let mut win = std::collections::HashMap::new();
+        win.insert("id".to_string(), "7".to_string());
+        win.insert("name".to_string(), "Term".to_string());
+        let r = Response {
+            message_type: MessageType::ClientFocus,
+            windows: vec![win],
+            focus_index: None,
+        };
+        assert_eq!(r.clone(), r);
+    }
+
+    #[test]
+    fn app_event_alt_released_debug_contains_variant_name() {
+        let s = format!("{:?}", AppEvent::AltReleased);
+        assert!(s.contains("AltReleased"), "got: {s}");
+    }
+
+    #[test]
+    fn app_event_our_window_id_carries_payload() {
+        let e = AppEvent::OurWindowId("wid_99".to_string());
+        if let AppEvent::OurWindowId(id) = e {
+            assert_eq!(id, "wid_99");
+        } else {
+            panic!("unexpected variant");
+        }
+    }
+
+    #[test]
+    fn app_event_unix_socket_msg_carries_response() {
+        let r = Response {
+            message_type: MessageType::CycleWindows,
+            windows: vec![],
+            focus_index: Some(0),
+        };
+        let e = AppEvent::UnixSocketMsg(r.clone());
+        if let AppEvent::UnixSocketMsg(inner) = e {
+            assert_eq!(inner, r);
+        } else {
+            panic!("unexpected variant");
+        }
+    }
+
+    #[test]
+    fn truncate_empty_string_unchanged() {
+        assert_eq!(truncate_window_name("", 31), "");
+    }
+
+    #[test]
+    fn truncate_single_char_limit() {
+        assert_eq!(truncate_window_name("hello", 1), "h");
+    }
+
+    #[test]
+    fn truncate_mixed_ascii_and_unicode() {
+        let name = "ab😀cd";
+        // 5 chars total: a, b, 😀, c, d — truncating to 3 keeps "ab😀"
+        let result = truncate_window_name(name, 3);
+        assert_eq!(result.chars().count(), 3);
+        assert_eq!(result, "ab😀");
+    }
+
+    // ── IccQtileClient::call coverage ─────────────────────────────────────────
+    // Serialize env-var mutations so parallel tests don't interfere.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn restore_env(orig_cache: Option<String>, orig_display: Option<String>) {
+        // SAFETY: ENV_LOCK is held by every caller, serialising all env mutations.
+        unsafe {
+            match orig_cache {
+                Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
+                None => std::env::remove_var("XDG_CACHE_HOME"),
+            }
+            match orig_display {
+                Some(v) => std::env::set_var("WAYLAND_DISPLAY", v),
+                None => std::env::remove_var("WAYLAND_DISPLAY"),
+            }
+        }
+    }
+
+    /// All-`Some` arms + success path: spins up a mock Qtile socket that returns
+    /// a legacy `[0, null]` response, exercising every new line in
+    /// `IccQtileClient::call` including the `.map(|r| r.to_json())` closure.
+    #[test]
+    fn icc_qtile_client_call_all_some_branches_via_mock_socket() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixListener;
+
+        const SOCKET_DIR: &str = "/tmp/qalttab_icc_mock_test";
+        const DISPLAY: &str = "wayland-qalttab-mock";
+        let socket_path = format!("{SOCKET_DIR}/qtile/qtilesocket.{DISPLAY}");
+
+        std::fs::create_dir_all(format!("{SOCKET_DIR}/qtile")).unwrap();
+        let _ = std::fs::remove_file(&socket_path);
+
+        let listener = UnixListener::bind(&socket_path).unwrap();
+        let server = std::thread::spawn(move || {
+            if let Ok((mut conn, _)) = listener.accept() {
+                let mut buf = String::new();
+                let _ = conn.read_to_string(&mut buf);
+                // Minimal valid Qtile legacy response: [status, result]
+                let _ = conn.write_all(b"[0, null]");
+            }
+        });
+
+        let _guard = ENV_LOCK.lock().unwrap();
+        let orig_cache = std::env::var("XDG_CACHE_HOME").ok();
+        let orig_display = std::env::var("WAYLAND_DISPLAY").ok();
+        // SAFETY: ENV_LOCK serialises all env mutations in this test module.
+        unsafe {
+            std::env::set_var("XDG_CACHE_HOME", SOCKET_DIR);
+            std::env::set_var("WAYLAND_DISPLAY", DISPLAY);
+        }
+
+        let result = IccQtileClient.call(
+            Some(vec![]),
+            Some("eval".to_string()),
+            Some(vec!["1+1".to_string()]),
+        );
+
+        restore_env(orig_cache, orig_display);
+        let _ = server.join();
+
+        assert_eq!(result.unwrap(), serde_json::Value::Null);
+    }
+
+    /// `None` arms for `object` and `args`: verifies those branches are skipped,
+    /// and that the function returns `Err` when no socket exists at the path.
+    #[test]
+    fn icc_qtile_client_call_none_object_and_args_returns_err() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let orig_cache = std::env::var("XDG_CACHE_HOME").ok();
+        let orig_display = std::env::var("WAYLAND_DISPLAY").ok();
+        // SAFETY: ENV_LOCK serialises all env mutations in this test module.
+        unsafe {
+            std::env::set_var("XDG_CACHE_HOME", "/tmp/qalttab_no_qtile_socket_xyz");
+            std::env::set_var("WAYLAND_DISPLAY", "wayland-qalttab-no-socket");
+        }
+
+        let result = IccQtileClient.call(None, Some("eval".to_string()), None);
+
+        restore_env(orig_cache, orig_display);
+        assert!(result.is_err());
     }
 }
