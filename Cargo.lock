@@ -4,9 +4,9 @@ version = 4
 
 [[package]]
 name = "accesskit"
-version = "0.24.1"
+version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3b7f7f85a7e5f68090000ed7622545829afd484d210358702ae4cb97dd0c320"
+checksum = "ad442f58ee04714aaa0ba0a2768c1ea1935b29507bb22ddece8cbbc76db02932"
 dependencies = [
  "enumn",
  "serde",
@@ -140,6 +140,7 @@ dependencies = [
  "parking_lot",
  "percent-encoding",
  "windows-sys 0.60.2",
+ "wl-clipboard-rs",
  "x11rb",
 ]
 
@@ -300,38 +301,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "calloop"
-version = "0.14.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dbf9978365bac10f54d1d4b04f7ce4427e51f71d61f2fe15e3fed5166474df7"
-dependencies = [
- "bitflags 2.13.0",
- "polling",
- "rustix 1.1.4",
- "slab",
- "tracing",
-]
-
-[[package]]
 name = "calloop-wayland-source"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95a66a987056935f7efce4ab5668920b5d0dac4a7c99991a67395f13702ddd20"
 dependencies = [
- "calloop 0.13.0",
+ "calloop",
  "rustix 0.38.44",
- "wayland-backend",
- "wayland-client",
-]
-
-[[package]]
-name = "calloop-wayland-source"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "138efcf0940a02ebf0cc8d1eff41a1682a46b431630f4c52450d6265876021fa"
-dependencies = [
- "calloop 0.14.4",
- "rustix 1.1.4",
  "wayland-backend",
  "wayland-client",
 ]
@@ -693,9 +669,9 @@ checksum = "8c98b077c7463d01d22dde8a24378ddf1ca7263dc687cffbed38819ea6c21131"
 
 [[package]]
 name = "ecolor"
-version = "0.36.2"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0656a7530b9e2841ee7a5f983965bdd9840c32f4012f759cfd44b912cced6b34"
+checksum = "31bcbef0d4263a63eb32c4834e5d711613035ce1333468e107d928923e21e6e2"
 dependencies = [
  "bytemuck",
  "emath",
@@ -704,9 +680,9 @@ dependencies = [
 
 [[package]]
 name = "eframe"
-version = "0.36.2"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55ad41fac6e3149abb4866e93df37dbd33baa95db525c3368c944584e95a5dc2"
+checksum = "9c5642501a65ca657d05f00c643a5c14ff2346cb3818032bfe23d58e1f8e5f84"
 dependencies = [
  "ahash",
  "bytemuck",
@@ -729,6 +705,7 @@ dependencies = [
  "profiling",
  "raw-window-handle",
  "ron",
+ "send_wrapper",
  "serde",
  "static_assertions",
  "wasm-bindgen",
@@ -740,9 +717,9 @@ dependencies = [
 
 [[package]]
 name = "egui"
-version = "0.36.2"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc938cc27cd911415e1e4d151bc56ff9df063d8db081374e87aeb805ea74b2ba"
+checksum = "bec9144f49b7a28b5f395d3147e325b4fe3e77ba686eac11d1bdf0a7da3f375f"
 dependencies = [
  "accesskit",
  "ahash",
@@ -763,9 +740,9 @@ dependencies = [
 
 [[package]]
 name = "egui-wgpu"
-version = "0.36.2"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cef1f6d1bba40b09a4d0d62cb822b81030922cfbf65c5373398c3a3caafc5bd"
+checksum = "0309cbe1febed48af5b974e4bcc424b35e9664863a4d402697147b57a488c864"
 dependencies = [
  "ahash",
  "bytemuck",
@@ -783,30 +760,32 @@ dependencies = [
 
 [[package]]
 name = "egui-winit"
-version = "0.36.2"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98466000559d66ba4db786a30448b01483946add4188e7f10f522a27b4fb89cc"
+checksum = "e4e449f4c4a2a60c7ccb4ba7fa4078417bfe1f9ddc03b5e05ce75748e33a70de"
 dependencies = [
  "arboard",
+ "block2 0.6.2",
  "bytemuck",
  "egui",
  "log",
  "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
  "objc2-ui-kit 0.3.2",
  "profiling",
  "raw-window-handle",
  "serde",
- "smithay-clipboard",
  "web-time",
+ "windows-sys 0.61.2",
  "winit",
 ]
 
 [[package]]
 name = "egui_extras"
-version = "0.36.2"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05cbdc785020861553f230f23d330ba1fb72613b9d8e0e457f3bdc8ba6db6dcf"
+checksum = "def286cf47194f3fe45b8e37c503ada7a20a64b59a903b4bc704baec943b1827"
 dependencies = [
  "ahash",
  "egui",
@@ -822,9 +801,9 @@ dependencies = [
 
 [[package]]
 name = "egui_glow"
-version = "0.36.2"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "606ed4167daf341e5753d703285c4c1d562324b2c07aa8f405cd7d066fe58f3b"
+checksum = "9275ca5cc35a6b7c94e0e8cedf22542f66cb0cf45ed8ab2657c78ff49fec7268"
 dependencies = [
  "bytemuck",
  "egui",
@@ -856,9 +835,9 @@ checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
 name = "emath"
-version = "0.36.2"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52c8d4141cf0f60fb2f7aefaf352d3ffa5171ef0ab09731c64391801e95e48f1"
+checksum = "e73ce90f54750be8672c02be0743fe47530e6f251e066f0ee2869b59eb297af5"
 dependencies = [
  "bytemuck",
  "serde",
@@ -866,22 +845,22 @@ dependencies = [
 
 [[package]]
 name = "enum-map"
-version = "2.7.3"
+version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6866f3bfdf8207509a033af1a75a7b08abda06bbaaeae6669323fd5a097df2e9"
+checksum = "d4532960034c15ba2f55e9eee631040ecc473c32e6c4b200828c759840f13a06"
 dependencies = [
  "enum-map-derive",
 ]
 
 [[package]]
 name = "enum-map-derive"
-version = "0.17.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f282cfdfe92516eb26c2af8589c274c7c17681f5ecc03c18255fe741c6aa64eb"
+checksum = "7127272f64b3e098f7d81f350d672081b879bff896d219c42370dc858b1af9ff"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.117",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -897,9 +876,9 @@ dependencies = [
 
 [[package]]
 name = "epaint"
-version = "0.36.2"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0ec0308dc23130fc1a7d4623a8534c2ed069c6dc84e258ee4f3de99615aa1a3"
+checksum = "97bac86ae3dde93fc3951e790951caea739ff39a6c89d909cdaf1d9278dbb1bd"
 dependencies = [
  "ahash",
  "bytemuck",
@@ -917,15 +896,16 @@ dependencies = [
  "skrifa",
  "smallvec",
  "unicode-general-category",
+ "unicode-properties",
  "unicode-segmentation",
  "vello_cpu",
 ]
 
 [[package]]
 name = "epaint_default_fonts"
-version = "0.36.2"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "773fa9c96dd0dbef887e39d0ed6177f141cce4d68e6041df77570aa3702dfa13"
+checksum = "cfc1cc505827f4c23eedc297975a0fd038268d41293f389dd8ff3b574aefab19"
 
 [[package]]
 name = "equivalent"
@@ -1011,6 +991,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
+name = "fixedbitset"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
+
+[[package]]
 name = "flate2"
 version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1025,6 +1011,12 @@ name = "float-cmp"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
+
+[[package]]
+name = "foldhash"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "foldhash"
@@ -1169,13 +1161,13 @@ dependencies = [
 
 [[package]]
 name = "glifo"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed4a1bb24121291d27230c1b1b44e07d6a9b28cefdb32fe1581dfb84e14f940a"
+checksum = "282a26c1e23de04bdab3e34a21b6f877a479b96737792516b9b8b8f69b6661be"
 dependencies = [
  "bytemuck",
- "foldhash",
- "hashbrown",
+ "foldhash 0.2.0",
+ "hashbrown 0.17.1",
  "log",
  "peniko",
  "skrifa",
@@ -1284,11 +1276,20 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
+version = "0.15.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
+dependencies = [
+ "foldhash 0.1.5",
+]
+
+[[package]]
+name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 dependencies = [
- "foldhash",
+ "foldhash 0.2.0",
 ]
 
 [[package]]
@@ -1368,7 +1369,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855"
 dependencies = [
  "equivalent",
- "hashbrown",
+ "hashbrown 0.17.1",
  "serde",
  "serde_core",
 ]
@@ -1682,7 +1683,7 @@ dependencies = [
  "cfg_aliases",
  "codespan-reporting",
  "half",
- "hashbrown",
+ "hashbrown 0.17.1",
  "indexmap",
  "libm",
  "log",
@@ -1700,7 +1701,7 @@ version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "590afbf58a6f4f62873cd5cff4468061844bafa1cdf399cc954537c22d768d49"
 dependencies = [
- "hashbrown",
+ "hashbrown 0.17.1",
  "indexmap",
  "rustc-hash 1.1.0",
  "thiserror 2.0.18",
@@ -1741,6 +1742,15 @@ name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
+
+[[package]]
+name = "nom"
+version = "8.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "ntapi"
@@ -1846,6 +1856,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c"
 dependencies = [
  "bitflags 2.13.0",
+ "block2 0.6.2",
  "objc2 0.6.4",
  "objc2-core-foundation",
  "objc2-core-graphics",
@@ -2141,6 +2152,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "os_pipe"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "os_str_bytes"
 version = "6.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2190,6 +2211,17 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
+name = "petgraph"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8701b58ea97060d5e5b155d383a69952a60943f0e6dfe30b04c287beb0b27455"
+dependencies = [
+ "fixedbitset",
+ "hashbrown 0.15.5",
+ "indexmap",
+]
 
 [[package]]
 name = "phf"
@@ -2360,9 +2392,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.106"
+version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
+checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
 ]
@@ -2438,9 +2470,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.45"
+version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41f2619966050689382d2b44f664f4bc593e129785a36d6ee376ddf37259b924"
+checksum = "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001"
 dependencies = [
  "proc-macro2",
 ]
@@ -2735,6 +2767,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
 
 [[package]]
+name = "send_wrapper"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
+
+[[package]]
 name = "serde"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2914,9 +2952,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.15.1"
+version = "1.16.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+checksum = "d0d5d4b1981b8bbbb7aed204cae5726d683d5d6ac7e74ec54122ea28f315e7c8"
 dependencies = [
  "serde",
 ]
@@ -2928,8 +2966,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3457dea1f0eb631b4034d61d4d8c32074caa6cd1ab2d59f2327bd8461e2c0016"
 dependencies = [
  "bitflags 2.13.0",
- "calloop 0.13.0",
- "calloop-wayland-source 0.3.0",
+ "calloop",
+ "calloop-wayland-source",
  "cursor-icon",
  "libc",
  "log",
@@ -2944,44 +2982,6 @@ dependencies = [
  "wayland-protocols-wlr",
  "wayland-scanner",
  "xkeysym",
-]
-
-[[package]]
-name = "smithay-client-toolkit"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0512da38f5e2b31201a93524adb8d3136276fa4fe4aafab4e1f727a82b534cc0"
-dependencies = [
- "bitflags 2.13.0",
- "calloop 0.14.4",
- "calloop-wayland-source 0.4.1",
- "cursor-icon",
- "libc",
- "log",
- "memmap2",
- "rustix 1.1.4",
- "thiserror 2.0.18",
- "wayland-backend",
- "wayland-client",
- "wayland-csd-frame",
- "wayland-cursor",
- "wayland-protocols",
- "wayland-protocols-experimental",
- "wayland-protocols-misc",
- "wayland-protocols-wlr",
- "wayland-scanner",
- "xkeysym",
-]
-
-[[package]]
-name = "smithay-clipboard"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71704c03f739f7745053bde45fa203a46c58d25bc5c4efba1d9a60e9dba81226"
-dependencies = [
- "libc",
- "smithay-client-toolkit 0.20.0",
- "wayland-backend",
 ]
 
 [[package]]
@@ -3275,7 +3275,6 @@ version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
 dependencies = [
- "log",
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
@@ -3299,6 +3298,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "tree_magic_mini"
+version = "3.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8765b90061cba6c22b5831f675da109ae5561588290f9fa2317adab2714d5a6"
+dependencies = [
+ "memchr",
+ "nom",
+ "petgraph",
 ]
 
 [[package]]
@@ -3333,6 +3343,12 @@ name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
+
+[[package]]
+name = "unicode-properties"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7df058c713841ad818f1dc5d3fd88063241cc61f49f5fbea4b951e8cf5a8d71d"
 
 [[package]]
 name = "unicode-segmentation"
@@ -3432,9 +3448,9 @@ dependencies = [
 
 [[package]]
 name = "vello_common"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2e9aed918117e8152c9eddfd8362d73c465c23f26c44786aa331707b8a64fa2"
+checksum = "bbb2141a2bca6e6d598e471fd4d1d7eed8e020aad6a28187edda07f091a325dd"
 dependencies = [
  "bytemuck",
  "fearless_simd",
@@ -3447,13 +3463,13 @@ dependencies = [
 
 [[package]]
 name = "vello_cpu"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac7349e1f55f6b801c7c277958df4ea53e7f20f21e8014910ad888b2ecda93ea"
+checksum = "ace506ca414548966fcf3c283be94eb1cad8254de488791ee698bf438b0890a9"
 dependencies = [
  "bytemuck",
  "glifo",
- "hashbrown",
+ "hashbrown 0.17.1",
  "vello_common",
 ]
 
@@ -3604,32 +3620,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "wayland-protocols-experimental"
-version = "20250721.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40a1f863128dcaaec790d7b4b396cc9b9a7a079e878e18c47e6c2d2c5a8dcbb1"
-dependencies = [
- "bitflags 2.13.0",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-scanner",
-]
-
-[[package]]
-name = "wayland-protocols-misc"
-version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e9567599ef23e09b8dad6e429e5738d4509dfc46b3b21f32841a304d16b29c8"
-dependencies = [
- "bitflags 2.13.0",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-scanner",
-]
-
-[[package]]
 name = "wayland-protocols-plasma"
 version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3725,7 +3715,7 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "document-features",
- "hashbrown",
+ "hashbrown 0.17.1",
  "js-sys",
  "log",
  "portable-atomic",
@@ -3754,7 +3744,7 @@ dependencies = [
  "bytemuck",
  "cfg_aliases",
  "document-features",
- "hashbrown",
+ "hashbrown 0.17.1",
  "indexmap",
  "log",
  "naga",
@@ -3791,7 +3781,7 @@ dependencies = [
  "bitflags 2.13.0",
  "cfg-if",
  "cfg_aliases",
- "hashbrown",
+ "hashbrown 0.17.1",
  "libloading",
  "log",
  "naga",
@@ -4215,7 +4205,7 @@ dependencies = [
  "atomic-waker",
  "bitflags 2.13.0",
  "block2 0.5.1",
- "calloop 0.13.0",
+ "calloop",
  "cfg_aliases",
  "concurrent-queue",
  "core-foundation",
@@ -4235,7 +4225,7 @@ dependencies = [
  "raw-window-handle",
  "redox_syscall 0.4.1",
  "rustix 0.38.44",
- "smithay-client-toolkit 0.19.2",
+ "smithay-client-toolkit",
  "smol_str",
  "tracing",
  "unicode-segmentation",
@@ -4265,6 +4255,24 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+
+[[package]]
+name = "wl-clipboard-rs"
+version = "0.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d7888ccd4896447b2d14d3a9350a85df2aeb6f181e2e7a31349d104ac46cac1"
+dependencies = [
+ "libc",
+ "log",
+ "os_pipe",
+ "rustix 1.1.4",
+ "thiserror 2.0.18",
+ "tree_magic_mini",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-protocols-wlr",
+]
 
 [[package]]
 name = "x11rb"
