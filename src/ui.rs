@@ -803,7 +803,7 @@ impl eframe::App for AsyncApp {
 }
 
 pub fn run_ui() -> anyhow::Result<()> {
-    let s = System::new_all();
+    let s = System::new_all()?;
     let qalttab_processes_parents = s
         .processes_by_exact_name("qalttab".as_ref())
         .map(|p| p.parent());
